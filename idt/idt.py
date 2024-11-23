@@ -127,10 +127,19 @@ class IDTInnerLayer:
     def fit(self, x, y, adj, sample_weight=None):
         if self.n_features_in == 0:
             x = np.ones((x.shape[0], 1))
-        x_neigh = adj @ x
-        deg = adj.sum(axis=1)
+
+        x_neigh_out = adj @ x
+        deg_out = adj.sum(axis=1) # out-neighbors are handled as before
+
+        x_neigh_in = adj.T @ x
+        deg_in = adj.T.sum(axis=1) # transpose represents in-neighbors
+
         x = np.asarray(np.concatenate([
-            x, x_neigh, x_neigh / deg.clip(1e-6, None)
+            x,
+            x_neigh_out,
+            x_neigh_in,
+            x_neigh_out / deg_out.clip(1e-6, None),
+            x_neigh_in / deg_in.clip(1e-6, None)
         ], axis=1))
         self.dt = DecisionTreeRegressor(max_depth=self.max_depth, splitter='random')
         self.dt.fit(x, y, sample_weight=sample_weight)
@@ -159,9 +168,18 @@ class IDTInnerLayer:
     def predict(self, x, adj=None):
         if self.n_features_in == 0:
             x = np.ones((x.shape[0], 1))
-        x_neigh = adj @ x
+        x_neigh_out = adj @ x
+        deg_out = adj.sum(axis=1) # out-neighbors are handled as before
+
+        x_neigh_in = adj.T @ x
+        deg_in = adj.T.sum(axis=1) # transpose represents in-neighbors
+
         x = np.asarray(np.concatenate([
-            x, x_neigh, x_neigh / (adj.sum(axis=1)).clip(1e-6, None)
+            x,
+            x_neigh_out,
+            x_neigh_in,
+            x_neigh_out / deg_out.clip(1e-6, None),
+            x_neigh_in / deg_in.clip(1e-6, None)
         ], axis=1))
         pred = self.dt.apply(x)
         return self.leaf_values[self.leaf_indices[pred]]
@@ -332,11 +350,34 @@ def _get_values_model(batch, model):
 
 
 def _feature_formula(index, depth_indices):
-    depth, index = _feature_depth_index(index, depth_indices)
+    depth, local_index = _feature_depth_index(index, depth_indices)
+    n_features_in = sum(depth_indices)
+    num_feature_types = 5  # Number of feature types per depth
+    features_per_type = n_features_in // num_feature_types
+
     if depth == -1:
-        return fr'U_{{{index}}}'
+        return fr'U_{{{local_index}}}'
     else:
-        return fr'\chi_{{{index}}}^{{{depth}}}'
+        # Determine which feature type the index corresponds to
+        feature_type = local_index // features_per_type
+        feature_index = local_index % features_per_type
+
+        if feature_type == 0:
+            modal_param = 'I'
+        elif feature_type == 1:
+            modal_param = 'A'
+        elif feature_type == 2:
+            modal_param = 'A^T'
+        elif feature_type == 3:
+            modal_param = r'\frac{A}{d_{\text{out}}}'
+        elif feature_type == 4:
+            modal_param = r'\frac{A^T}{d_{\text{in}}}'
+        else:
+            modal_param = 'Unknown'
+
+        formula = fr'\chi_{{{feature_index}}}^{{{depth}}}'
+        return fr'{modal_param}{formula}'
+
 
 
 def _feature_depth_index(index, depth_indices):
