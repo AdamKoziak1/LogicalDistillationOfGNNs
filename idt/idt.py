@@ -236,6 +236,10 @@ class IDTInnerLayer:
                     elif feature < 2 * self.n_features_in:
                         obj.set_text(fr'$A{formula} > {int(threshold)}$')
                     elif feature < 3 * self.n_features_in:
+                        obj.set_text(fr'$A{formula} > {int(threshold)}$')
+                    elif feature < 4 * self.n_features_in:
+                        obj.set_text(fr'$A{formula} > {threshold}$')
+                    elif feature < 5 * self.n_features_in:
                         obj.set_text(fr'$A{formula} > {threshold}$')
                 else:
                     txt = r"$" + r", ".join([
