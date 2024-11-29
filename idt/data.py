@@ -73,12 +73,10 @@ def _generate_EMLC_from_graph_directed(name, u0, u1, adj):
             return Data(x=torch.tensor(u0), edge_index=edge_index, y=int(has_more_than_half_u0))
         case 'EMLC1':
             has_lt_4_or_gt_9_neighbors = (degrees < 4) | (degrees > 9)
-            y = int(has_lt_4_or_gt_9_neighbors.max())
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y)
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_lt_4_or_gt_9_neighbors.max()))
         case 'EMLC2':
             has_gt_6_neighbors = degrees > 6
             more_than_half_neighbours_with_gt_6_neighbors = ((undirected_adj @ has_gt_6_neighbors) / degrees.clip(1)) > 0.5
-            y = (more_than_half_neighbours_with_gt_6_neighbors.mean() > 0.5).astype(int)
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_6_neighbors).float().mean() > 0.5).long())
         # TODO add more cases specific to directed stuff (will need to update logic, use the higher parity digraphs and have in/out specific rules)
 
@@ -87,7 +85,7 @@ def _generate_EMLC_from_graph_undirected(name, u0, u1, adj):
     match name:
         case 'EMLC0':
             has_more_than_half_u0 = (u0.sum() > 6)
-            return Data(x=torch.tensor(u0), edge_index=_adj_to_edge_index(adj), y=int(has_more_than_half_u0))
+            return Data(x=torch.tensor(u0), edge_index=edge_index, y=int(has_more_than_half_u0))
         case 'EMLC1':
             has_lt_4_or_gt_9_neighbors = (edge_index[0].bincount() < 4) | (edge_index[0].bincount() > 9)
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_lt_4_or_gt_9_neighbors.max()))
