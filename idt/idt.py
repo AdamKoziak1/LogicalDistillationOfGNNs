@@ -236,11 +236,11 @@ class IDTInnerLayer:
                     elif feature < 2 * self.n_features_in:
                         obj.set_text(fr'$A{formula} > {int(threshold)}$')
                     elif feature < 3 * self.n_features_in:
-                        obj.set_text(fr'$A{formula} > {int(threshold)}$')
+                        obj.set_text(fr'$A^T{formula} > {int(threshold)}$')
                     elif feature < 4 * self.n_features_in:
                         obj.set_text(fr'$A{formula} > {threshold}$')
                     elif feature < 5 * self.n_features_in:
-                        obj.set_text(fr'$A{formula} > {threshold}$')
+                        obj.set_text(fr'$A^T{formula} > {threshold}$')
                 else:
                     txt = r"$" + r", ".join([
                         fr"M_{{{i}}}^{{{n}}}" for i in self.leaf_formulas[[i for i in self.leaf_indices if i != -1][leaf_counter]]
@@ -352,19 +352,25 @@ def _get_values_model(batch, model):
     hook.remove()
     return values[:-1]
 
-
 def _feature_formula(index, depth_indices):
-    depth, local_index = _feature_depth_index(index, depth_indices)
+    depth, index = _feature_depth_index(index, depth_indices)
+    if depth == -1:
+        return fr'U_{{{index}}}'
+    else:
+        return fr'\chi_{{{index}}}^{{{depth}}}'
+"""
+def _feature_formula(index, depth_indices):
+    depth, index = _feature_depth_index(index, depth_indices)
     n_features_in = sum(depth_indices)
     num_feature_types = 5  # Number of feature types per depth
     features_per_type = n_features_in // num_feature_types
 
     if depth == -1:
-        return fr'U_{{{local_index}}}'
+        return fr'U_{{{index}}}'
     else:
         # Determine which feature type the index corresponds to
-        feature_type = local_index // features_per_type
-        feature_index = local_index % features_per_type
+        feature_type = index // features_per_type
+        feature_index = index % features_per_type
 
         if feature_type == 0:
             modal_param = 'I'
@@ -382,7 +388,7 @@ def _feature_formula(index, depth_indices):
         formula = fr'\chi_{{{feature_index}}}^{{{depth}}}'
         return fr'{modal_param}{formula}'
 
-
+"""
 
 def _feature_depth_index(index, depth_indices):
     index = index % sum(depth_indices)

@@ -200,7 +200,7 @@ def EMLC_compare(name):
     # Generate directed version of the same graph
     directed_adj = _undirected_adj_to_directed_nodup(undirected_adj)
     directed = _generate_EMLC_from_graph_directed(name, u0, u1, directed_adj)
-
+    print("Y:", directed.y)
     print('adj')
     print(undirected_adj.sum(axis=1), undirected_adj.sum(axis=1) + undirected_adj.sum(axis=0))
     print(undirected_adj)
