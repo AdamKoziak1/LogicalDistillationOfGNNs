@@ -12,7 +12,7 @@ from torch_geometric.datasets import TUDataset
 
 def data(name, kfold, cv_split, seed=0, directed=True):
     rng = np.random.default_rng(seed)
-    if name in ['EMLC0', 'EMLC1', 'EMLC2', 'BAMultiShapes']:
+    if name == 'BAMultiShapes' or 'EMLC' in name:
         if name == 'BAMultiShapes':
             datalist = [_generate_BAMultiShapes(rng) for _ in range(8000)] # TODO implement the directed logic for this one
         else:
@@ -104,13 +104,13 @@ def _generate_EMLC_from_graph_directed(name, u0, u1, adj):
         
         case 'EMLC7': # at least one node has out-degree > 2
             has_gt_2_out_neighbors = degrees_out > 2 # check which nodes have out degree > 2
-            y = int(has_gt_2_out_neighbors).max() # check if one of the nodes met the condition
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
+            y = int(has_gt_2_out_neighbors.max()) # check if one of the nodes met the condition
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y)
         
         case 'EMLC8': # at least one node has in-degree > 2
             has_gt_2_in_neighbors = degrees_in > 2 # check which nodes have in degree > 2
-            y = int(has_gt_2_in_neighbors).max() # check if one of the nodes met the condition
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
+            y = int(has_gt_2_in_neighbors.max()) # check if one of the nodes met the condition
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y)
 
         case 'EMLC9': # more than half of the nodes have at least half of their in-neighbors with in-degree > 2
             has_gt_2_in_neighbors = degrees_in > 2
@@ -352,13 +352,18 @@ def _directed_adj_to_undirected(adj):
     return undirected_adj
 
 if __name__ == "__main__":
-    names = ['EMLC2']
-    #names = ['EMLC0', 'EMLC1', 'EMLC2']
-    dic = {}
+    #names = ['EMLC2']
+    names = ['EMLC3', 'EMLC4', 'EMLC5','EMLC6', 'EMLC7', 'EMLC8', 'EMLC9', 'EMLC10']
+    #dic = {}
     for name in names:
-        matching = 0
-        for i in range(10):
-            if EMLC_compare(name):
-                matching +=1 
-        dic[name] = matching
-    print(dic)
+        #matching = 0
+        print(name)
+        for i in range(2):
+            num_features, num_classes, train_loader, val_loader, train_val_batch, test_batch = data(name, 10, 0, seed=42)    
+            bincount = torch.bincount(train_val_batch.y, minlength=2)
+            weight = len(train_val_batch) / (2 * bincount.float())
+            print(bincount, weight)
+            #if EMLC_compare(name):
+                #matching +=1 
+        #dic[name] = matching
+    #print(dic)
