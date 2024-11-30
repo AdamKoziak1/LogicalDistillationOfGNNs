@@ -1,0 +1,7 @@
+2024-11-30 16:15:49,176 - INFO - Dataset: EMLC0
+2024-11-30 16:15:49,240 - INFO - GCN test accuracy: 0.8740000128746033
+2024-11-30 16:15:49,757 - INFO - IDT test accuracy: 1.0
+2024-11-30 16:15:50,262 - INFO - IDT F1 score: 1.0
+2024-11-30 16:15:50,846 - INFO - Fidelity: 0.874
+2024-11-30 16:15:50,847 - INFO - Binary Count: tensor([2306, 2194])
+2024-11-30 16:15:50,849 - INFO - Weight: tensor([0.9757, 1.0255])
