@@ -9,6 +9,7 @@ from torch_geometric.data import Batch, Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.datasets import TUDataset
 
+import matplotlib.pyplot as plt
 
 def data(name, kfold, cv_split, seed=0, directed=True):
     rng = np.random.default_rng(seed)
@@ -52,10 +53,9 @@ def data(name, kfold, cv_split, seed=0, directed=True):
 def _generate_EMLC(name, rng, directed=True):
     u0 = (rng.random((13, 1)) < 0.5).astype(np.float32)
     u1 = np.ones((13, 1), dtype=np.float32)
-    graph = nx.erdos_renyi_graph(13, 0.5, seed=rng.choice(2**32))
+    graph = nx.erdos_renyi_graph(13, 0.5, seed=rng.choice(2**32), directed=directed)
     adj = nx.adjacency_matrix(graph).toarray()
     if directed:
-        adj = _undirected_adj_to_directed_nodup(adj)
         return _generate_EMLC_from_graph_directed(name, u0, u1, adj)
     return _generate_EMLC_from_graph_undirected(name, u0, u1, adj)
 
@@ -65,8 +65,8 @@ def _generate_EMLC_from_graph_directed(name, u0, u1, adj):
     out_adj = adj
     in_adj = adj.T
 
-    degrees_out = adj.sum(axis=1)  # Out-degree (sum over columns)
-    degrees_in = adj.sum(axis=0)   # In-degree (sum over rows)
+    degrees_out = out_adj.sum(axis=1)  # Out-degree (sum over columns)
+    degrees_in = in_adj.sum(axis=1)   # In-degree (sum over rows)
     degrees = degrees_in + degrees_out
 
     undirected_adj = _directed_adj_to_undirected(adj)
@@ -82,44 +82,44 @@ def _generate_EMLC_from_graph_directed(name, u0, u1, adj):
             more_than_half_neighbours_with_gt_6_neighbors = ((undirected_adj @ has_gt_6_neighbors) / degrees.clip(1)) > 0.5
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_6_neighbors).float().mean() > 0.5).long())
         
-        case 'EMLC3': # more than half of the nodes have in-degree > 2
-            has_gt_2_in_neighbors = degrees_in > 2 # check which nodes have in degree > 2
-            y = torch.tensor(has_gt_2_in_neighbors).float().mean() > 0.5 # check if over half of the nodes met the condition
+        case 'EMLC3': # more than half of the nodes have in-degree > 6
+            has_gt_2_in_neighbors = degrees_in > 6 # check which nodes have in degree > 6
+            y = torch.tensor(has_gt_2_in_neighbors).float().mean() > 0.33 # check if over half of the nodes met the condition
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
         
-        case 'EMLC4': # more than 3/4 of the nodes have in-degree > 2
-            has_gt_2_in_neighbors = degrees_in > 2 # check which nodes have in degree > 2
-            y = torch.tensor(has_gt_2_in_neighbors).float().mean() > 0.75 # check if over half of the nodes met the condition
+        case 'EMLC4': # more than 3/4 of the nodes have in-degree > 6
+            has_gt_2_in_neighbors = degrees_in > 5 # check which nodes have in degree > 6
+            y = torch.tensor(has_gt_2_in_neighbors).float().mean() > 0.66 # check if over half of the nodes met the condition
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
         
-        case 'EMLC5': # more than half of the nodes have out-degree > 2
-            has_gt_2_out_neighbors = degrees_out > 2 # check which nodes have out degree > 2
-            y = torch.tensor(has_gt_2_out_neighbors).float().mean() > 0.5 # check if over half of the nodes met the condition
+        case 'EMLC5': # more than half of the nodes have out-degree > 6
+            has_gt_2_out_neighbors = degrees_out > 5 # check which nodes have out degree > 6
+            y = torch.tensor(has_gt_2_out_neighbors).float().mean() > 0.66 # check if over half of the nodes met the condition
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
         
-        case 'EMLC6': # more than 3/4 of the nodes have out-degree > 2
-            has_gt_2_out_neighbors = degrees_out > 2 # check which nodes have out degree > 2
-            y = torch.tensor(has_gt_2_out_neighbors).float().mean() > 0.75 # check if over half of the nodes met the condition
+        case 'EMLC6': # more than 3/4 of the nodes have out-degree > 6
+            has_gt_2_out_neighbors = degrees_out > 5 # check which nodes have out degree > 6
+            y = torch.tensor(has_gt_2_out_neighbors).float().mean() > 0.66 # check if over half of the nodes met the condition
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
         
         case 'EMLC7': # at least one node has out-degree > 2
-            has_gt_2_out_neighbors = degrees_out > 5 # check which nodes have out degree > 2
+            has_gt_2_out_neighbors = degrees_out > 8 # check which nodes have out degree > 2
             y = int(has_gt_2_out_neighbors.max()) # check if one of the nodes met the condition
             #print(y)
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=y)
         
         case 'EMLC8': # at least one node has in-degree > 2
-            has_gt_2_in_neighbors = degrees_in > 5 # check which nodes have in degree > 2
+            has_gt_2_in_neighbors = degrees_in > 8 # check which nodes have in degree > 2
             y = int(has_gt_2_in_neighbors.max()) # check if one of the nodes met the condition
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=y)
 
         case 'EMLC9': # more than half of the nodes have at least half of their in-neighbors with in-degree > 2
-            has_gt_2_in_neighbors = degrees_in > 2
-            more_than_half_neighbours_with_gt_2_in_neighbors = ((in_adj @ has_gt_2_in_neighbors) / degrees_in.clip(1)) > 0.5
+            has_gt_2_in_neighbors = degrees_in > 5
+            more_than_half_neighbours_with_gt_2_in_neighbors = ((in_adj @ has_gt_2_in_neighbors) / degrees_in.clip(1)) > 0.66
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_2_in_neighbors).float().mean() > 0.5).long())
         
         case 'EMLC10': # more than two of the nodes have at least half of their in-neighbors with in-degree > 2
-            has_gt_2_in_neighbors = degrees_in > 2
+            has_gt_2_in_neighbors = degrees_in > 6
             more_than_half_neighbours_with_gt_2_in_neighbors = ((in_adj @ has_gt_2_in_neighbors) / degrees_in.clip(1)) > 0.5
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_2_in_neighbors).sum() > 2).long())
         
@@ -352,16 +352,160 @@ def _directed_adj_to_undirected(adj):
                 undirected_adj[j, i] = 1
     return undirected_adj
 
-if __name__ == "__main__":
+def generate_graphs_nodup(num_graphs, num_nodes, edge_prob, p=0.5, seed=0):
+    rng = np.random.default_rng(seed)
+    graphs = []
+    for _ in range(num_graphs):
+        # Generate an undirected graph
+        G_undirected = nx.erdos_renyi_graph(num_nodes, edge_prob, seed=rng.choice(2**32))
+        # Get adjacency matrix
+        adj_undirected = nx.adjacency_matrix(G_undirected).toarray()
+        # Convert to directed using nodup method
+        adj_directed = _undirected_adj_to_directed_nodup(adj_undirected, p=p)
+        # Create directed graph from adjacency matrix
+        G_directed = nx.from_numpy_array(adj_directed, create_using=nx.DiGraph)
+        graphs.append(G_directed)
+    return graphs
+
+def generate_graphs_directed(num_graphs, num_nodes, edge_prob, seed=0):
+    rng = np.random.default_rng(seed)
+    graphs = []
+    for _ in range(num_graphs):
+        # Generate a directed graph
+        G_directed = nx.erdos_renyi_graph(num_nodes, edge_prob, directed=True, seed=rng.choice(2**32))
+        graphs.append(G_directed)
+    return graphs
+
+def compute_degree_stats(graphs, degree_thresholds):
+    in_degree_counts = []
+    out_degree_counts = []
+    nodes_with_in_degree_threshold = {thresh: [] for thresh in degree_thresholds}
+    nodes_with_out_degree_threshold = {thresh: [] for thresh in degree_thresholds}
+    
+    for G in graphs:
+        in_degrees = np.array([deg for _, deg in G.in_degree()])
+        out_degrees = np.array([deg for _, deg in G.out_degree()])
+        in_degree_counts.extend(in_degrees)
+        out_degree_counts.extend(out_degrees)
+        for thresh in degree_thresholds:
+            num_nodes_in = np.sum(in_degrees >= thresh)
+            num_nodes_out = np.sum(out_degrees >= thresh)
+            nodes_with_in_degree_threshold[thresh].append(num_nodes_in)
+            nodes_with_out_degree_threshold[thresh].append(num_nodes_out)
+    
+    return in_degree_counts, out_degree_counts, nodes_with_in_degree_threshold, nodes_with_out_degree_threshold
+
+def plot_degree_distributions(in_degrees, out_degrees, method_name):
+    plt.figure(figsize=(12, 5))
+
+    plt.subplot(1, 2, 1)
+    plt.hist(in_degrees, bins=range(max(in_degrees)+2), alpha=0.7, color='skyblue', edgecolor='black')
+    plt.title(f'In-Degree Distribution ({method_name})')
+    plt.xlabel('In-Degree')
+    plt.ylabel('Frequency')
+
+    plt.subplot(1, 2, 2)
+    plt.hist(out_degrees, bins=range(max(out_degrees)+2), alpha=0.7, color='salmon', edgecolor='black')
+    plt.title(f'Out-Degree Distribution ({method_name})')
+    plt.xlabel('Out-Degree')
+    plt.ylabel('Frequency')
+
+    plt.tight_layout()
+    plt.show()
+
+def plot_threshold_results(degree_thresholds, avg_nodes_in, avg_nodes_out, method_name):
+    plt.figure(figsize=(12, 5))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(degree_thresholds, avg_nodes_in, marker='o', linestyle='-', color='blue')
+    plt.title(f'Average Nodes with In-Degree ≥ Threshold ({method_name})')
+    plt.xlabel('Degree Threshold')
+    plt.ylabel('Average Number of Nodes')
+    plt.grid(True)
+
+    plt.subplot(1, 2, 2)
+    plt.plot(degree_thresholds, avg_nodes_out, marker='o', linestyle='-', color='red')
+    plt.title(f'Average Nodes with Out-Degree ≥ Threshold ({method_name})')
+    plt.xlabel('Degree Threshold')
+    plt.ylabel('Average Number of Nodes')
+    plt.grid(True)
+
+    plt.tight_layout()
+    plt.show()
+
+def graph_degree_stats_test():
+    num_graphs = 1000
+    num_nodes = 13
+    edge_prob = 0.5
+    degree_thresholds = list(range(1, num_nodes))
+    seed = 42
+
+    # Generate graphs using nodup method
+    graphs_nodup = generate_graphs_nodup(num_graphs, num_nodes, edge_prob, p=0.5, seed=seed)
+    # Generate graphs directly as directed graphs
+    graphs_directed = generate_graphs_directed(num_graphs, num_nodes, edge_prob, seed=seed)
+
+    # Compute degree statistics for nodup graphs
+    in_degrees_nodup, out_degrees_nodup, nodes_in_thresh_nodup, nodes_out_thresh_nodup = compute_degree_stats(
+        graphs_nodup, degree_thresholds
+    )
+
+    # Compute degree statistics for directly generated directed graphs
+    in_degrees_directed, out_degrees_directed, nodes_in_thresh_directed, nodes_out_thresh_directed = compute_degree_stats(
+        graphs_directed, degree_thresholds
+    )
+
+    # Plot degree distributions
+    plot_degree_distributions(in_degrees_nodup, out_degrees_nodup, 'Undirected to Directed (nodup)')
+    plot_degree_distributions(in_degrees_directed, out_degrees_directed, 'Directly Generated Directed Graphs')
+
+    # Calculate average counts of nodes with degrees above thresholds
+    avg_nodes_in_nodup = [np.mean(nodes_in_thresh_nodup[thresh]) for thresh in degree_thresholds]
+    avg_nodes_out_nodup = [np.mean(nodes_out_thresh_nodup[thresh]) for thresh in degree_thresholds]
+
+    avg_nodes_in_directed = [np.mean(nodes_in_thresh_directed[thresh]) for thresh in degree_thresholds]
+    avg_nodes_out_directed = [np.mean(nodes_out_thresh_directed[thresh]) for thresh in degree_thresholds]
+
+    # Plot threshold results for nodup method
+    plot_threshold_results(degree_thresholds, avg_nodes_in_nodup, avg_nodes_out_nodup, 'Undirected to Directed (nodup)')
+
+    # Plot threshold results for directly generated directed graphs
+    plot_threshold_results(degree_thresholds, avg_nodes_in_directed, avg_nodes_out_directed, 'Directly Generated Directed Graphs')
+
+    # Optionally, plot both methods on the same plot for comparison
+    plt.figure(figsize=(12, 5))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(degree_thresholds, avg_nodes_in_nodup, marker='o', linestyle='-', color='blue', label='Nodup Method')
+    plt.plot(degree_thresholds, avg_nodes_in_directed, marker='x', linestyle='--', color='green', label='Directed Graphs')
+    plt.title('Average Nodes with In-Degree ≥ Threshold')
+    plt.xlabel('Degree Threshold')
+    plt.ylabel('Average Number of Nodes')
+    plt.legend()
+    plt.grid(True)
+
+    plt.subplot(1, 2, 2)
+    plt.plot(degree_thresholds, avg_nodes_out_nodup, marker='o', linestyle='-', color='red', label='Nodup Method')
+    plt.plot(degree_thresholds, avg_nodes_out_directed, marker='x', linestyle='--', color='purple', label='Directed Graphs')
+    plt.title('Average Nodes with Out-Degree ≥ Threshold')
+    plt.xlabel('Degree Threshold')
+    plt.ylabel('Average Number of Nodes')
+    plt.legend()
+    plt.grid(True)
+
+    plt.tight_layout()
+    plt.show()
+
+def check_emlc():
     #names = ['EMLC2']
-    names = ['EMLC3', 
+    names = [#'EMLC3', 
              'EMLC4', 
-             'EMLC5',
+             #'EMLC5',
              'EMLC6', 
-             'EMLC7', 
-             'EMLC8', 
+             #'EMLC7', 
+             #'EMLC8', 
              'EMLC9', 
-             'EMLC10'
+             #'EMLC10'
              ]
     #dic = {}
     for name in names:
@@ -376,3 +520,9 @@ if __name__ == "__main__":
                 #matching +=1 
         #dic[name] = matching
     #print(dic)
+
+if __name__ == "__main__":
+    check_emlc()
+    #graph_degree_stats_test()
+
+    
