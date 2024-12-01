@@ -2,7 +2,7 @@ import torch
 
 from idt.data import data
 
-for i in range(2):
+for i in range(3,11):
     dataset = 'EMLC' + str(i)
 
     num_features, num_classes, train_loader, val_loader, train_val_batch, test_batch = data(dataset, 10, 0, seed=42)
