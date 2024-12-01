@@ -141,7 +141,7 @@ if __name__ == '__main__':
     parser.add_argument('--layer_depth', type=int, default=2, help='Depth of iterated decision trees')
     parser.add_argument('--max_depth', type=int, default=None, help='Maximum depth of final tree')
     parser.add_argument('--ccp_alpha', type=float, default=1e-3, help='ccp_alpha of final tree')
-    parser.add_argument('--devices', type=int, default=4, help='Number of devices')
+    parser.add_argument('--devices', type=int, default=1, help='Number of devices')
 
     def signal_handler(sig, frame):
         signal.signal(sig, signal.SIG_IGN)

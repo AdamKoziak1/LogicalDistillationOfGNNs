@@ -2,11 +2,11 @@ import torch
 
 from idt.data import data
 
-for i in range(3,11):
+for i in range(10,11):
     dataset = 'EMLC' + str(i)
 
     num_features, num_classes, train_loader, val_loader, train_val_batch, test_batch = data(dataset, 10, 0, seed=42)
-        
+    
     bincount = torch.bincount(train_val_batch.y, minlength=2)
     weight = len(train_val_batch) / (2 * bincount.float())
     
@@ -49,3 +49,8 @@ for i in range(3,11):
         logging.info(f"Weight: {weight}")
 
     log_run_results()
+    
+# Change to call evaluate
+# Change number of samples
+# return for all types of trees and differentiate them + log
+# latex code output
