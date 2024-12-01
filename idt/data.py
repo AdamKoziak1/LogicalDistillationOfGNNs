@@ -103,12 +103,13 @@ def _generate_EMLC_from_graph_directed(name, u0, u1, adj):
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
         
         case 'EMLC7': # at least one node has out-degree > 2
-            has_gt_2_out_neighbors = degrees_out > 2 # check which nodes have out degree > 2
+            has_gt_2_out_neighbors = degrees_out > 5 # check which nodes have out degree > 2
             y = int(has_gt_2_out_neighbors.max()) # check if one of the nodes met the condition
+            #print(y)
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=y)
         
         case 'EMLC8': # at least one node has in-degree > 2
-            has_gt_2_in_neighbors = degrees_in > 2 # check which nodes have in degree > 2
+            has_gt_2_in_neighbors = degrees_in > 5 # check which nodes have in degree > 2
             y = int(has_gt_2_in_neighbors.max()) # check if one of the nodes met the condition
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=y)
 
@@ -353,12 +354,20 @@ def _directed_adj_to_undirected(adj):
 
 if __name__ == "__main__":
     #names = ['EMLC2']
-    names = ['EMLC3', 'EMLC4', 'EMLC5','EMLC6', 'EMLC7', 'EMLC8', 'EMLC9', 'EMLC10']
+    names = ['EMLC3', 
+             'EMLC4', 
+             'EMLC5',
+             'EMLC6', 
+             'EMLC7', 
+             'EMLC8', 
+             'EMLC9', 
+             'EMLC10'
+             ]
     #dic = {}
     for name in names:
         #matching = 0
         print(name)
-        for i in range(2):
+        for i in range(1):
             num_features, num_classes, train_loader, val_loader, train_val_batch, test_batch = data(name, 10, 0, seed=42)    
             bincount = torch.bincount(train_val_batch.y, minlength=2)
             weight = len(train_val_batch) / (2 * bincount.float())
