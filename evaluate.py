@@ -38,7 +38,7 @@ def run_split(args, cv_split, run_id, device=0):
         logger=logger,
         devices=[device],
         enable_checkpointing=False,
-        enable_progress_bar=False,
+        enable_progress_bar=True,
         log_every_n_steps=1
     )
     trainer.fit(GCN, train_dataloaders=train_loader, val_dataloaders=val_loader)
@@ -53,7 +53,7 @@ def run_split(args, cv_split, run_id, device=0):
         logger=logger,
         devices=[device],
         enable_checkpointing=False,
-        enable_progress_bar=False,
+        enable_progress_bar=True,
         log_every_n_steps=1
     )
     trainer.fit(GIN, train_dataloaders=train_loader, val_dataloaders=val_loader)
@@ -81,7 +81,6 @@ def run_split(args, cv_split, run_id, device=0):
         explainer_prediction = idt.predict(test_batch)
         test_accuracy = (explainer_prediction == test_batch.y.detach().numpy()).mean()
         idt.prune()
-        idt.save_image(f'./figures/{args.dataset}_{args.activation}_{logger.version}_{test_accuracy}.png')
         return (
             test_accuracy,
             f1_score(test_batch.y.detach().numpy(), explainer_prediction, average='macro'),
