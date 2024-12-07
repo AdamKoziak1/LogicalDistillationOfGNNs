@@ -51,15 +51,21 @@ def data(name, kfold, cv_split, seed=0, directed=True):
     
 
 def _generate_EMLC(name, rng, directed=True):
-    u0 = (rng.random((5, 1)) < 0.5).astype(np.float32)
-    u1 = np.ones((5, 1), dtype=np.float32)
-    graph = nx.erdos_renyi_graph(5, 0.5, seed=rng.choice(2**32), directed=directed)
+    nodes = 13
+    if name == 'EMLC0':
+        nodes = 5
+    u0 = (rng.random((nodes, 1)) < 0.5).astype(np.float32)
+    u1 = np.ones((nodes, 1), dtype=np.float32)
+    u2 = np.ones((nodes, 1), dtype=np.float32)
+    u2[np.random.randint(nodes-1)]=0
+
+    graph = nx.erdos_renyi_graph(nodes, 0.5, seed=rng.choice(2**32), directed=directed)
     adj = nx.adjacency_matrix(graph).toarray()
     if directed:
-        return _generate_EMLC_from_graph_directed(name, u0, u1, adj)
-    return _generate_EMLC_from_graph_undirected(name, u0, u1, adj)
+        return _generate_EMLC_from_graph_directed(name, u0, u1, u2, adj)
+    return _generate_EMLC_from_graph_undirected(name, u0, u1, u2, adj)
 
-def _generate_EMLC_from_graph_directed(name, u0, u1, adj):
+def _generate_EMLC_from_graph_directed(name, u0, u1, u2, adj):
     edge_index = _adj_to_edge_index(adj)
 
     out_adj = adj
@@ -67,69 +73,42 @@ def _generate_EMLC_from_graph_directed(name, u0, u1, adj):
 
     degrees_out = out_adj.sum(axis=1)  # Out-degree (sum over columns)
     degrees_in = in_adj.sum(axis=1)   # In-degree (sum over rows)
-    degrees = degrees_in + degrees_out
 
-    undirected_adj = _directed_adj_to_undirected(adj)
     match name:
-        case 'EMLC0':
-            has_more_than_half_u0 = (u0.sum() > 6)
-            return Data(x=torch.tensor(u0), edge_index=edge_index, y=int(has_more_than_half_u0))
-#       case 'EMLC1':
-#           has_lt_4_or_gt_9_neighbors = (degrees < 4) | (degrees > 9)
-#           return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_lt_4_or_gt_9_neighbors.max()))
-        case 'EMLC1': #Nick's example
+        case 'EMLC0': #Nick's example, 5 nodes
             has_gt_3_out_neighbors = (degrees_out > 3)
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_gt_3_out_neighbors.max()))
-        case 'EMLC2':
-            has_gt_6_neighbors = degrees > 6
-            more_than_half_neighbours_with_gt_6_neighbors = ((undirected_adj @ has_gt_6_neighbors) / degrees.clip(1)) > 0.5
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_6_neighbors).float().mean() > 0.5).long())
-        case 'EMLC3': # more than half of the nodes have in-degree > 6
-            has_gt_2_in_neighbors = degrees_in > 6 # check which nodes have in degree > 6
-            y = torch.tensor(has_gt_2_in_neighbors).float().mean() > 0.33 # check if over half of the nodes met the condition
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
-        case 'EMLC4': # more than 3/4 of the nodes have in-degree > 6
-            has_gt_2_in_neighbors = degrees_in > 5 # check which nodes have in degree > 6
-            y = torch.tensor(has_gt_2_in_neighbors).float().mean() > 0.66 # check if over half of the nodes met the condition
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
-#        case 'EMLC5': # more than half of the nodes have out-degree > 6
-#            has_gt_2_out_neighbors = degrees_out > 5 # check which nodes have out degree > 6
-#            y = torch.tensor(has_gt_2_out_neighbors).float().mean() > 0.66 # check if over half of the nodes met the condition
-#            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
-        case 'EMLC6': # more than 3/4 of the nodes have out-degree > 6
-            has_gt_2_out_neighbors = degrees_out > 5 # check which nodes have out degree > 6
-            y = torch.tensor(has_gt_2_out_neighbors).float().mean() > 0.66 # check if over half of the nodes met the condition
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
-        case 'EMLC7': # at least one node has out-degree > 2
-            has_gt_2_out_neighbors = degrees_out > 8 # check which nodes have out degree > 2
-            y = int(has_gt_2_out_neighbors.max()) # check if one of the nodes met the condition
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y)
-        case 'EMLC8': # at least one node has in-degree > 2
-            has_gt_2_in_neighbors = degrees_in > 8 # check which nodes have in degree > 2
-            y = int(has_gt_2_in_neighbors.max()) # check if one of the nodes met the condition
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y)
-        case 'EMLC9': # more than half of the nodes have at least half of their in-neighbors with in-degree > 2
-            has_gt_2_in_neighbors = degrees_in > 5
-            more_than_half_neighbours_with_gt_2_in_neighbors = ((in_adj @ has_gt_2_in_neighbors) / degrees_in.clip(1)) > 0.66
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_2_in_neighbors).float().mean() > 0.5).long())
-        case 'EMLC10': # more than two of the nodes have at least half of their in-neighbors with in-degree > 2
-            has_gt_2_in_neighbors = degrees_in > 6
-            more_than_half_neighbours_with_gt_2_in_neighbors = ((in_adj @ has_gt_2_in_neighbors) / degrees_in.clip(1)) > 0.5
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_2_in_neighbors).sum() > 2).long())
         
+        case 'EMLC1':
+            has_more_than_half_u0 = (u0.sum() > 6)
+            return Data(x=torch.tensor(u0), edge_index=edge_index, y=int(has_more_than_half_u0))
 
-        # case 'EMLC10': # more than half of the nodes have at least half of their in-neighbors or out-neighbors with in-degree > 2 
-        #     has_gt_2_in_neighbors = degrees_in > 2
+        case 'EMLC2':
+            has_gt_8_out_neighbors = (degrees_out > 8).max()
+            has_gt_8_in_neighbors = (degrees_in > 8).max()
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_gt_8_out_neighbors and has_gt_8_in_neighbors))
 
-        #     (((in_adj @ has_gt_2_in_neighbors) | (out_adj @ has_gt_2_in_neighbors)) / degrees.clip(1)) > 0.5
+        case 'EMLC3':
+            has_gt_8_out_neighbors = (degrees_out > 8).max()
+            has_gt_8_in_neighbors = (degrees_in > 8).max()
+            return Data(x=torch.tensor(u2), edge_index=edge_index, y=int(has_gt_8_out_neighbors and has_gt_8_in_neighbors))
 
+        case 'EMLC4':
+            has_lt_4_in_or_gt_9_out_neighbors = (degrees_in < 4) & (degrees_out > 3)
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_lt_4_in_or_gt_9_out_neighbors.max()))
+            
+        case 'EMLC5': 
+            has_gt_6_in_neighbors = degrees_in > 6
+            more_than_half_out_neighbours_with_gt_6_in_neighbors = ((out_adj @ has_gt_6_in_neighbors) / degrees_in.clip(1)) > 0.5
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_out_neighbours_with_gt_6_in_neighbors).float().mean() > 0.5).long())
+        
+        case 'EMLC6': # more than half of the nodes have at least half of their in-neighbors or out-neighbors with in-degree > 2 
+            has_gt_6_in_neighbors = degrees_in > 6
+            more_than_half_in_neighbours_with_gt_6_in_neighbors = ((in_adj @ has_gt_6_in_neighbors) / degrees_in.clip(1)) > 0.5
+            more_than_half_out_neighbours_with_gt_6_in_neighbors = ((out_adj @ has_gt_6_in_neighbors) / degrees_out.clip(1)) > 0.5
+            combined = more_than_half_in_neighbours_with_gt_6_in_neighbors | more_than_half_out_neighbours_with_gt_6_in_neighbors
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(combined).float().mean() > 0.5).long())
 
-        #     more_than_half_in_neighbours_with_gt_2_in_neighbors = ((in_adj @ has_gt_2_in_neighbors) / degrees.clip(1)) > 0.5
-        #     more_than_half_out_neighbours_with_gt_2_in_neighbors = ((out_adj @ has_gt_2_in_neighbors) / degrees.clip(1)) > 0.5
-        #     combined = more_than_half_in_neighbours_with_gt_2_in_neighbors or more_than_half_out_neighbours_with_gt_2_in_neighbors
-        #     return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_2_in_neighbors).float().mean() > 0.5).long())
-
-        # TODO add more cases specific to directed stuff (will need to update logic, use the higher parity digraphs and have in/out specific rules)
 
 def _generate_EMLC_from_graph_undirected(name, u0, u1, adj):
     edge_index = _adj_to_edge_index(adj)
@@ -492,14 +471,13 @@ def graph_degree_stats_test():
 
 def check_emlc():
     #names = ['EMLC2']
-    names = [#'EMLC3', 
+    names = ['EMLC0', 
+             'EMLC1', 
+             'EMLC2', 
+             'EMLC3', 
              'EMLC4', 
-             #'EMLC5',
+             'EMLC5',
              'EMLC6', 
-             #'EMLC7', 
-             #'EMLC8', 
-             'EMLC9', 
-             #'EMLC10'
              ]
     #dic = {}
     for name in names:
