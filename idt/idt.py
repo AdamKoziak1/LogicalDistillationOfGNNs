@@ -167,7 +167,7 @@ class IDT:
         j = 0
         for i, layer in enumerate(self.layer):
             fig, axs = plt.subplots(#ncols=self.width, nrows=len(self.layer)//self.width + 1,
-                figsize=(16,16))
+                figsize=(6,6))
             PLT("plotting layer " + str(i))
             try:
                 #plot = layer.plot(axs[i // self.width, i % self.width], i)
@@ -183,7 +183,7 @@ class IDT:
                 ERR("failed to plot layer " + str(i))
                 plt.close()
                 continue
-        fig, ax = plt.subplots(figsize=(16, 16))
+        fig, ax = plt.subplots(figsize=(4, 4))
         PLT("plotting out layer")
         self.out_layer.plot(ax, len(self.layer))
         ax.properties()['children'] = [replace_text(i) for i in ax.properties()['children']]

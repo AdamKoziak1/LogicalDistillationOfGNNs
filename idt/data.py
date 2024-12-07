@@ -14,11 +14,11 @@ import matplotlib.pyplot as plt
 
 
 # DATA ========================================================================================================================
-def data(name, kfold, cv_split, seed=0, directed=True, plot_a_sample=False):
+def data(name, kfold, cv_split, rng, directed=True):
     from idt.ui import DBG, HLT, NEW, NXT, END, MRK, HLN, CND, ERR, PLT
     import logging
     logging.getLogger('lightning').setLevel(0)
-    rng = np.random.default_rng(seed)
+    #rng = np.random.default_rng(seed)
     if name == 'BAMultiShapes' or 'EMLC' in name:
         NEW("generating dataset")
         if name == 'BAMultiShapes':
@@ -27,8 +27,9 @@ def data(name, kfold, cv_split, seed=0, directed=True, plot_a_sample=False):
             NXT("dataset type = " + str(name))
             datalist = [_generate_EMLC(name, rng, directed) for _ in range(500)]
             NXT("samples = " + str(500))
-            if plot_a_sample:
-                _generate_EMLC_sample(name, rng, directed)
+            #if plot_a_sample:
+            #    for i in range(20):
+            #        _generate_EMLC_sample(name, rng, directed)
         
         n_test = len(datalist) // kfold
         NXT("folds = " + str(kfold))
@@ -84,7 +85,7 @@ def _generate_EMLC_sample(name, rng, directed=True):
     u1 = np.ones((5, 1), dtype=np.float32)
     graph = nx.erdos_renyi_graph(5, 0.5, seed=rng.choice(2**32), directed=directed)
     plt.subplot()
-    nx.draw(graph, with_labels=True, font_weight='bold')
+    nx.draw_networkx(graph, with_labels=True, node_size=400, width=2, edge_color="tab:blue", font_weight='bold', font_color="whitesmoke")
     plt.show()
     plt.close()
     adj = nx.adjacency_matrix(graph).toarray()
@@ -128,9 +129,9 @@ def _generate_EMLC_from_graph_directed(name, u0, u1, adj, plot_sample=False):
         #    has_lt_4_or_gt_9_neighbors = (degrees < 4) | (degrees > 9)
         #    return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_lt_4_or_gt_9_neighbors.max()))
         case 'EMLC2':
-            has_gt_6_neighbors = degrees > 6
-            more_than_half_neighbours_with_gt_6_neighbors = ((undirected_adj @ has_gt_6_neighbors) / degrees.clip(1)) > 0.5
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_6_neighbors).float().mean() > 0.5).long())
+            has_gt_6_in_neighbors = degrees_in > 4
+            more_than_half_out_neighbours_with_gt_6_in_neighbors = ((out_adj @ has_gt_6_in_neighbors) / degrees.clip(1)) > 0.5
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_out_neighbours_with_gt_6_in_neighbors).float().mean() > 0.5).long())
         
         case 'EMLC3': # more than half of the nodes have in-degree > 6
             has_gt_2_in_neighbors = degrees_in > 6 # check which nodes have in degree > 6
