@@ -127,10 +127,19 @@ class IDTInnerLayer:
     def fit(self, x, y, adj, sample_weight=None):
         if self.n_features_in == 0:
             x = np.ones((x.shape[0], 1))
-        x_neigh = adj @ x
-        deg = adj.sum(axis=1)
+
+        x_neigh_out = adj @ x
+        deg_out = adj.sum(axis=1) # out-neighbors are handled as before
+
+        x_neigh_in = adj.T @ x
+        deg_in = adj.T.sum(axis=1) # transpose represents in-neighbors
+
         x = np.asarray(np.concatenate([
-            x, x_neigh, x_neigh / deg.clip(1e-6, None)
+            x,
+            x_neigh_out,
+            x_neigh_in,
+            x_neigh_out / deg_out.clip(1e-6, None),
+            x_neigh_in / deg_in.clip(1e-6, None)
         ], axis=1))
         self.dt = DecisionTreeRegressor(max_depth=self.max_depth, splitter='random')
         self.dt.fit(x, y, sample_weight=sample_weight)
@@ -159,9 +168,18 @@ class IDTInnerLayer:
     def predict(self, x, adj=None):
         if self.n_features_in == 0:
             x = np.ones((x.shape[0], 1))
-        x_neigh = adj @ x
+        x_neigh_out = adj @ x
+        deg_out = adj.sum(axis=1) # out-neighbors are handled as before
+
+        x_neigh_in = adj.T @ x
+        deg_in = adj.T.sum(axis=1) # transpose represents in-neighbors
+
         x = np.asarray(np.concatenate([
-            x, x_neigh, x_neigh / (adj.sum(axis=1)).clip(1e-6, None)
+            x,
+            x_neigh_out,
+            x_neigh_in,
+            x_neigh_out / deg_out.clip(1e-6, None),
+            x_neigh_in / deg_in.clip(1e-6, None)
         ], axis=1))
         pred = self.dt.apply(x)
         return self.leaf_values[self.leaf_indices[pred]]
@@ -199,33 +217,25 @@ class IDTInnerLayer:
         self.dt.tree_.feature[parent] = -2
         self.dt.tree_.threshold[parent] = -2
 
-    def plot(self, ax, n=0):
-        from sklearn.tree import plot_tree
-        plot_tree(self.dt, ax=ax)
-        leaf_counter = 0
-        for obj in ax.properties()['children']:
-            if type(obj) == matplotlib.text.Annotation:
-                obj.set_fontsize(8)
-                txt = obj.get_text().splitlines()[0]
-                match = re.match(r'x\[(\d+)\] <= (\d+\.\d+)', txt)
-                if match:
-                    feature, threshold = match.groups()
-                    feature = int(feature)
-                    formula = _feature_formula(feature, self.depth_indices)
-                    threshold = float(threshold)
-                    if feature < self.n_features_in:
-                        obj.set_text(fr'$I{formula} > 0$')
-                    elif feature < 2 * self.n_features_in:
-                        obj.set_text(fr'$A{formula} > {int(threshold)}$')
-                    elif feature < 3 * self.n_features_in:
-                        obj.set_text(fr'$A{formula} > {threshold}$')
-                else:
-                    txt = r"$" + r", ".join([
-                        fr"M_{{{i}}}^{{{n}}}" for i in self.leaf_formulas[[i for i in self.leaf_indices if i != -1][leaf_counter]]
-                    ]) + r"\:$"
-                    obj.set_text(txt)
-                    leaf_counter += 1
+    def plot(self):
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(
+            figsize=(8, 8)
+        )
+        self.out_layer.plot(ax, len(self.layer))
+        ax.properties()['children'] = [replace_text(i) for i in ax.properties()['children']]
+        plt.show()
 
+def replace_text(obj):
+    import re
+    import matplotlib
+    if type(obj) == matplotlib.text.Annotation:
+        txt = obj.get_text()
+        txt = re.sub("gini[^$].*\n","",txt)
+        txt = re.sub("\nvalue[^$].*","",txt)
+        txt = re.sub("samples = ","",txt)
+        obj.set_text(txt)
+    return obj
 
 class IDTFinalLayer:
     def __init__(self, max_depth, ccp_alpha, depth_indices):
@@ -258,10 +268,9 @@ class IDTFinalLayer:
         plot_tree(self.dt, ax=ax)
         for obj in ax.properties()['children']:
             if type(obj) == matplotlib.text.Annotation:
-                obj.set_fontsize(8)
+                obj.set_fontsize(12)
                 txt = obj.get_text().splitlines()[0]
-                #match x[3] <= 13.1312
-                match = re.match(r'x\[(\d+)\] <= (\d+\.\d+)', txt)
+                match = re.match(r'x[(\d+)] <= (\d+.\d+)', txt)
                 if match:
                     feature, threshold = match.groups()
                     feature = int(feature)
@@ -330,14 +339,43 @@ def _get_values_model(batch, model):
     hook.remove()
     return values[:-1]
 
-
 def _feature_formula(index, depth_indices):
     depth, index = _feature_depth_index(index, depth_indices)
     if depth == -1:
         return fr'U_{{{index}}}'
     else:
         return fr'\chi_{{{index}}}^{{{depth}}}'
+"""
+def _feature_formula(index, depth_indices):
+    depth, index = _feature_depth_index(index, depth_indices)
+    n_features_in = sum(depth_indices)
+    num_feature_types = 5  # Number of feature types per depth
+    features_per_type = n_features_in // num_feature_types
 
+    if depth == -1:
+        return fr'U_{{{index}}}'
+    else:
+        # Determine which feature type the index corresponds to
+        feature_type = index // features_per_type
+        feature_index = index % features_per_type
+
+        if feature_type == 0:
+            modal_param = 'I'
+        elif feature_type == 1:
+            modal_param = 'A'
+        elif feature_type == 2:
+            modal_param = 'A^T'
+        elif feature_type == 3:
+            modal_param = r'\frac{A}{d_{\text{out}}}'
+        elif feature_type == 4:
+            modal_param = r'\frac{A^T}{d_{\text{in}}}'
+        else:
+            modal_param = 'Unknown'
+
+        formula = fr'\chi_{{{feature_index}}}^{{{depth}}}'
+        return fr'{modal_param}{formula}'
+
+"""
 
 def _feature_depth_index(index, depth_indices):
     index = index % sum(depth_indices)
@@ -347,3 +385,4 @@ def _feature_depth_index(index, depth_indices):
             return depth, index
         index -= i
         depth += 1
+
