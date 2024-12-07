@@ -11,15 +11,27 @@ from torch_geometric.datasets import TUDataset
 
 import matplotlib.pyplot as plt
 
-def data(name, kfold, cv_split, seed=0, directed=True):
+
+
+# DATA ========================================================================================================================
+def data(name, kfold, cv_split, seed=0, directed=True, plot_a_sample=False):
+    from idt.ui import DBG, HLT, NEW, NXT, END, MRK, HLN, CND, ERR, PLT
+    import logging
+    logging.getLogger('lightning').setLevel(0)
     rng = np.random.default_rng(seed)
     if name == 'BAMultiShapes' or 'EMLC' in name:
+        NEW("generating dataset")
         if name == 'BAMultiShapes':
             datalist = [_generate_BAMultiShapes(rng) for _ in range(8000)] # TODO implement the directed logic for this one
         else:
-            datalist = [_generate_EMLC(name, rng, directed) for _ in range(5000)]
+            NXT("dataset type = " + str(name))
+            datalist = [_generate_EMLC(name, rng, directed) for _ in range(500)]
+            NXT("samples = " + str(500))
+            if plot_a_sample:
+                _generate_EMLC_sample(name, rng, directed)
         
         n_test = len(datalist) // kfold
+        NXT("folds = " + str(kfold))
         
         train_val_data = datalist[:cv_split * n_test] + datalist[(cv_split + 1) * n_test:]
         train_data, val_data = torch.utils.data.random_split(train_val_data, [len(train_val_data) - n_test, n_test])
@@ -49,68 +61,144 @@ def data(name, kfold, cv_split, seed=0, directed=True):
         
         return dataset.num_features, dataset.num_classes, train_loader, val_loader, train_val_batch, test_batch
     
+    
 
-def _generate_EMLC(name, rng, directed=True):
-    nodes = 13
-    if name == 'EMLC0':
-        nodes = 5
-    u0 = (rng.random((nodes, 1)) < 0.5).astype(np.float32)
-    u1 = np.ones((nodes, 1), dtype=np.float32)
-    u2 = np.ones((nodes, 1), dtype=np.float32)
-    u2[np.random.randint(nodes-1)]=0
-
-    graph = nx.erdos_renyi_graph(nodes, 0.5, seed=rng.choice(2**32), directed=directed)
+# _GENERATE_EMLC ==============================================================================================================
+def _generate_EMLC(name, rng, directed=True, plot_graph_num=0):
+    from idt.ui import DBG, HLT, NEW, NXT, END, MRK, HLN, CND, ERR, PLT
+    u0 = (rng.random((5, 1)) < 0.5).astype(np.float32)
+    u1 = np.ones((5, 1), dtype=np.float32)
+    graph = nx.erdos_renyi_graph(5, 0.5, seed=rng.choice(2**32), directed=directed)
     adj = nx.adjacency_matrix(graph).toarray()
     if directed:
-        return _generate_EMLC_from_graph_directed(name, u0, u1, u2, adj)
-    return _generate_EMLC_from_graph_undirected(name, u0, u1, u2, adj)
+        return _generate_EMLC_from_graph_directed(name, u0, u1, adj, plot_sample=False)
+    return _generate_EMLC_from_graph_undirected(name, u0, u1, adj, plot_sample=False)
 
-def _generate_EMLC_from_graph_directed(name, u0, u1, u2, adj):
+
+
+# _GENERATE_EMLC_SAMPLE ========================================================================================================
+def _generate_EMLC_sample(name, rng, directed=True):
+    import matplotlib.pyplot as plt
+    from idt.ui import DBG, HLT, NEW, NXT, END, MRK, HLN, CND, ERR, PLT
+    u0 = (rng.random((5, 1)) < 0.5).astype(np.float32)
+    u1 = np.ones((5, 1), dtype=np.float32)
+    graph = nx.erdos_renyi_graph(5, 0.5, seed=rng.choice(2**32), directed=directed)
+    plt.subplot()
+    nx.draw(graph, with_labels=True, font_weight='bold')
+    plt.show()
+    plt.close()
+    adj = nx.adjacency_matrix(graph).toarray()
+    if directed:
+        return _generate_EMLC_from_graph_directed(name, u0, u1, adj, plot_sample=True)
+    return _generate_EMLC_from_graph_undirected(name, u0, u1, adj, plot_sample=True)
+
+
+
+# _GENERATE_EMLC_FROM_GRAPH_DIRECTED ==========================================================================================
+def _generate_EMLC_from_graph_directed(name, u0, u1, adj, plot_sample=False):
+    from idt.ui import DBG, HLT, NEW, NXT, END, MRK, HLN, CND, ERR, PLT
     edge_index = _adj_to_edge_index(adj)
 
     out_adj = adj
     in_adj = adj.T
 
+    if plot_sample:
+        print("A:\n" + str(out_adj))
+        print("")
+        print("A^T:\n" + str(in_adj))
+        print("")
+        print("U_0:\n" + str(u0))
+        print("")
+        print("U_1:\n" + str(u1))
+        print("")
+
     degrees_out = out_adj.sum(axis=1)  # Out-degree (sum over columns)
     degrees_in = in_adj.sum(axis=1)   # In-degree (sum over rows)
+    degrees = degrees_in + degrees_out
 
+    undirected_adj = _directed_adj_to_undirected(adj)
     match name:
-        case 'EMLC0': #Nick's example, 5 nodes
-            has_gt_3_out_neighbors = (degrees_out > 3)
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_gt_3_out_neighbors.max()))
-        
-        case 'EMLC1':
+        case 'EMLC0':
             has_more_than_half_u0 = (u0.sum() > 6)
             return Data(x=torch.tensor(u0), edge_index=edge_index, y=int(has_more_than_half_u0))
-
+        case 'EMLC1':
+            has_gt_3_out_neighbors = (degrees_out > 3)
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_gt_3_out_neighbors.max()))
+        #case 'EMLC1':
+        #    has_lt_4_or_gt_9_neighbors = (degrees < 4) | (degrees > 9)
+        #    return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_lt_4_or_gt_9_neighbors.max()))
         case 'EMLC2':
-            has_gt_8_out_neighbors = (degrees_out > 8).max()
-            has_gt_8_in_neighbors = (degrees_in > 8).max()
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_gt_8_out_neighbors and has_gt_8_in_neighbors))
-
-        case 'EMLC3':
-            has_gt_8_out_neighbors = (degrees_out > 8).max()
-            has_gt_8_in_neighbors = (degrees_in > 8).max()
-            return Data(x=torch.tensor(u2), edge_index=edge_index, y=int(has_gt_8_out_neighbors and has_gt_8_in_neighbors))
-
-        case 'EMLC4':
-            has_lt_4_in_or_gt_9_out_neighbors = (degrees_in < 4) & (degrees_out > 3)
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_lt_4_in_or_gt_9_out_neighbors.max()))
-            
-        case 'EMLC5': 
-            has_gt_6_in_neighbors = degrees_in > 6
-            more_than_half_out_neighbours_with_gt_6_in_neighbors = ((out_adj @ has_gt_6_in_neighbors) / degrees_in.clip(1)) > 0.5
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_out_neighbours_with_gt_6_in_neighbors).float().mean() > 0.5).long())
+            has_gt_6_neighbors = degrees > 6
+            more_than_half_neighbours_with_gt_6_neighbors = ((undirected_adj @ has_gt_6_neighbors) / degrees.clip(1)) > 0.5
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_6_neighbors).float().mean() > 0.5).long())
         
-        case 'EMLC6': # more than half of the nodes have at least half of their in-neighbors or out-neighbors with in-degree > 2 
+        case 'EMLC3': # more than half of the nodes have in-degree > 6
+            has_gt_2_in_neighbors = degrees_in > 6 # check which nodes have in degree > 6
+            y = torch.tensor(has_gt_2_in_neighbors).float().mean() > 0.33 # check if over half of the nodes met the condition
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
+        
+        case 'EMLC4': # more than 3/4 of the nodes have in-degree > 6
+            has_gt_2_in_neighbors = degrees_in > 5 # check which nodes have in degree > 6
+            y = torch.tensor(has_gt_2_in_neighbors).float().mean() > 0.66 # check if over half of the nodes met the condition
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
+        
+        case 'EMLC5': # more than half of the nodes have out-degree > 6
+            has_gt_2_out_neighbors = degrees_out > 5 # check which nodes have out degree > 6
+            y = torch.tensor(has_gt_2_out_neighbors).float().mean() > 0.66 # check if over half of the nodes met the condition
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
+        
+        case 'EMLC6': # more than 3/4 of the nodes have out-degree > 6
+            has_gt_2_out_neighbors = degrees_out > 5 # check which nodes have out degree > 6
+            y = torch.tensor(has_gt_2_out_neighbors).float().mean() > 0.66 # check if over half of the nodes met the condition
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y.long())
+        
+        case 'EMLC7': # at least one node has out-degree > 2
+            has_gt_2_out_neighbors = degrees_out > 8 # check which nodes have out degree > 2
+            y = int(has_gt_2_out_neighbors.max()) # check if one of the nodes met the condition
+            #print(y)
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y)
+        
+        case 'EMLC8': # at least one node has in-degree > 2
+            has_gt_2_in_neighbors = degrees_in > 8 # check which nodes have in degree > 2
+            y = int(has_gt_2_in_neighbors.max()) # check if one of the nodes met the condition
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=y)
+
+        case 'EMLC9': # more than half of the nodes have at least half of their in-neighbors with in-degree > 2
+            has_gt_2_in_neighbors = degrees_in > 5
+            more_than_half_neighbours_with_gt_2_in_neighbors = ((in_adj @ has_gt_2_in_neighbors) / degrees_in.clip(1)) > 0.66
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_2_in_neighbors).float().mean() > 0.5).long())
+        
+        case 'EMLC10': # more than two of the nodes have at least half of their in-neighbors with in-degree > 2
             has_gt_6_in_neighbors = degrees_in > 6
-            more_than_half_in_neighbours_with_gt_6_in_neighbors = ((in_adj @ has_gt_6_in_neighbors) / degrees_in.clip(1)) > 0.5
-            more_than_half_out_neighbours_with_gt_6_in_neighbors = ((out_adj @ has_gt_6_in_neighbors) / degrees_out.clip(1)) > 0.5
-            combined = more_than_half_in_neighbours_with_gt_6_in_neighbors | more_than_half_out_neighbours_with_gt_6_in_neighbors
-            return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(combined).float().mean() > 0.5).long())
+            more_than_half_neighbours_with_gt_6_in_neighbors = ((in_adj @ has_gt_6_in_neighbors) / degrees_in.clip(1)) > 0.5
+            return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_6_in_neighbors).sum() > 2).long())
+        
+
+        # case 'EMLC10': # more than half of the nodes have at least half of their in-neighbors or out-neighbors with in-degree > 2 
+        #     has_gt_2_in_neighbors = degrees_in > 2
+
+        #     (((in_adj @ has_gt_2_in_neighbors) | (out_adj @ has_gt_2_in_neighbors)) / degrees.clip(1)) > 0.5
 
 
-def _generate_EMLC_from_graph_undirected(name, u0, u1, adj):
+        #     more_than_half_in_neighbours_with_gt_2_in_neighbors = ((in_adj @ has_gt_2_in_neighbors) / degrees.clip(1)) > 0.5
+        #     more_than_half_out_neighbours_with_gt_2_in_neighbors = ((out_adj @ has_gt_2_in_neighbors) / degrees.clip(1)) > 0.5
+        #     combined = more_than_half_in_neighbours_with_gt_2_in_neighbors or more_than_half_out_neighbours_with_gt_2_in_neighbors
+        #     return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_2_in_neighbors).float().mean() > 0.5).long())
+
+        # TODO add more cases specific to directed stuff (will need to update logic, use the higher parity digraphs and have in/out specific rules)
+
+
+
+# _GENERATE_EMLC_FROM_GRAPH_UNDIRECTED ========================================================================================
+def _generate_EMLC_from_graph_undirected(name, u0, u1, adj, plot_sample=False):
+    from idt.ui import DBG, HLT, NEW, NXT, END, MRK, HLN, CND, ERR, PLT
+    if plot_sample:
+        print("A = " + str(adj))
+        print("")
+        print("U_0 = " + str(u0))
+        print("")
+        print("U_1 = " + str(u1))
+        print("")
     edge_index = _adj_to_edge_index(adj)
     match name:
         case 'EMLC0':
@@ -126,10 +214,13 @@ def _generate_EMLC_from_graph_undirected(name, u0, u1, adj):
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_6_neighbors).float().mean() > 0.5).long())
 
 
+
+# _MERGE_GRAPHS ===============================================================================================================
 # The following code is a modified version of
 # https://github.com/steveazzolin/gnn_logic_global_expl/blob/master/datasets/BAMultiShapes/generate_dataset.py
  # TODO maybe add another edge for directed?
 def _merge_graphs(g1, g2, nb_random_edges=1, rng=np.random.default_rng(0)):
+    from idt.ui import DBG, HLT, NEW, NXT, END, MRK, HLN, CND, ERR, PLT
     mapping = dict()
     max_node = max(g1.nodes())
 
@@ -146,6 +237,9 @@ def _merge_graphs(g1, g2, nb_random_edges=1, rng=np.random.default_rng(0)):
         g12.add_edge(e1,e2)
     return g12
 
+
+
+# _GENERATE_CLASS1 ============================================================================================================
  # TODO update for directed
 def _generate_class1(nb_random_edges, nb_node_ba, rng):
     r = rng.choice(3) 
@@ -170,6 +264,9 @@ def _generate_class1(nb_random_edges, nb_node_ba, rng):
         g123 = _merge_graphs(g12,g3,nb_random_edges, rng)
     return g123
 
+
+
+# _GENERATE_CLASS0 ============================================================================================================
  # TODO update for directed
 def _generate_class0(nb_random_edges, nb_node_ba, rng): 
     r = rng.choice(4)
@@ -198,8 +295,12 @@ def _generate_class0(nb_random_edges, nb_node_ba, rng):
         g12 = _merge_graphs(g123,g4,nb_random_edges)
     return g12
 
+
+
+# _GENERATE_BAMULTISHAPES =====================================================================================================
  # TODO update for directed
 def _generate_BAMultiShapes(rng):
+    from idt.ui import DBG, HLT, NEW, NXT, END, MRK, HLN, CND, ERR, PLT
     nb_node_ba = 40
     r = rng.choice(2)
     
@@ -211,11 +312,18 @@ def _generate_BAMultiShapes(rng):
         return Data(x=torch.ones((len(g.nodes()), 1)), edge_index=_adj_to_edge_index(nx.adjacency_matrix(g).toarray()), y=1)
 
 
+
+# _ADJ_TO_EDGE_INDEX ==========================================================================================================
 def _adj_to_edge_index(adj):
+    from idt.ui import DBG, HLT, NEW, NXT, END, MRK, HLN, CND, ERR, PLT
     matrix = coo_matrix(adj)
     return torch.stack([torch.tensor(matrix.row, dtype=torch.long), torch.tensor(matrix.col, dtype=torch.long)])
 
+
+
+# EMLC_COMPARE ================================================================================================================
 def EMLC_compare(name):
+    from idt.ui import DBG, HLT, NEW, NXT, END, MRK, HLN, CND, ERR, PLT
     rng = np.random.default_rng(0)
     u0 = (rng.random((13, 1)) < 0.5).astype(np.float32)
     u1 = np.ones((13, 1), dtype=np.float32)
@@ -286,7 +394,11 @@ def EMLC_compare(name):
     #print(f"Directed adjacency matrix:\n{directed_adj_torch}")
     return labels_match
 
+
+
+# _UNDIRECTED_ADJ_TO_DIRECTED_NODUP ===========================================================================================
 def _undirected_adj_to_directed_nodup(adj, p=0.5):
+    from idt.ui import DBG, HLT, NEW, NXT, END, MRK, HLN, CND, ERR, PLT
     # Convert undirected adjacency matrix to directed by assigning a random direction to each edge with some probability, mutually exclusive
     rng = np.random.default_rng(0)
     directed_adj = np.zeros_like(adj)
@@ -299,7 +411,11 @@ def _undirected_adj_to_directed_nodup(adj, p=0.5):
                     directed_adj[j, i] = 1
     return directed_adj
 
+
+
+# _UNDIRECTED_ADJ_TO_DIRECTED =================================================================================================
 def _undirected_adj_to_directed(adj, p1=0.45, p2=0.9):
+    from idt.ui import DBG, HLT, NEW, NXT, END, MRK, HLN, CND, ERR, PLT
     # Convert undirected adjacency matrix to directed by assigning one or both directions as an edge with tunable probabilities
     rng = np.random.default_rng(0)
     directed_adj = np.zeros_like(adj)
@@ -316,7 +432,11 @@ def _undirected_adj_to_directed(adj, p1=0.45, p2=0.9):
                     directed_adj[j, i] = 1
     return directed_adj
 
+
+
+# _DIRECTED_ADJ_TO_UNDIRECTED =================================================================================================
 def _directed_adj_to_undirected(adj):
+    from idt.ui import DBG, HLT, NEW, NXT, END, MRK, HLN, CND, ERR, PLT
     undirected_adj = np.zeros_like(adj)
     for i in range(adj.shape[0]):
         for j in range(i + 1, adj.shape[1]):
@@ -325,6 +445,9 @@ def _directed_adj_to_undirected(adj):
                 undirected_adj[j, i] = 1
     return undirected_adj
 
+
+
+# GENERATE_GRAPHS_NODUP =======================================================================================================
 def generate_graphs_nodup(num_graphs, num_nodes, edge_prob, p=0.5, seed=0):
     rng = np.random.default_rng(seed)
     graphs = []
@@ -340,6 +463,9 @@ def generate_graphs_nodup(num_graphs, num_nodes, edge_prob, p=0.5, seed=0):
         graphs.append(G_directed)
     return graphs
 
+
+
+# GENERATE_GRAPHS_DIRECTED ====================================================================================================
 def generate_graphs_directed(num_graphs, num_nodes, edge_prob, seed=0):
     rng = np.random.default_rng(seed)
     graphs = []
@@ -349,6 +475,9 @@ def generate_graphs_directed(num_graphs, num_nodes, edge_prob, seed=0):
         graphs.append(G_directed)
     return graphs
 
+
+
+# COMPUTE_DEGREE_STATS ========================================================================================================
 def compute_degree_stats(graphs, degree_thresholds):
     in_degree_counts = []
     out_degree_counts = []
@@ -368,6 +497,9 @@ def compute_degree_stats(graphs, degree_thresholds):
     
     return in_degree_counts, out_degree_counts, nodes_with_in_degree_threshold, nodes_with_out_degree_threshold
 
+
+
+# PLOT_DEGREE_DISTRIBUTIONS ===================================================================================================
 def plot_degree_distributions(in_degrees, out_degrees, method_name):
     plt.figure(figsize=(12, 5))
 
@@ -386,6 +518,9 @@ def plot_degree_distributions(in_degrees, out_degrees, method_name):
     plt.tight_layout()
     plt.show()
 
+
+
+# PLOT_THRESHOLD_RESULTS ======================================================================================================
 def plot_threshold_results(degree_thresholds, avg_nodes_in, avg_nodes_out, method_name):
     plt.figure(figsize=(12, 5))
 
@@ -406,6 +541,9 @@ def plot_threshold_results(degree_thresholds, avg_nodes_in, avg_nodes_out, metho
     plt.tight_layout()
     plt.show()
 
+
+
+# GRAPH_DEGREE_STATS_TEST =====================================================================================================
 def graph_degree_stats_test():
     num_graphs = 1000
     num_nodes = 13
@@ -469,15 +607,19 @@ def graph_degree_stats_test():
     plt.tight_layout()
     plt.show()
 
+
+
+# CHECK_EMLC ==================================================================================================================
 def check_emlc():
     #names = ['EMLC2']
-    names = ['EMLC0', 
-             'EMLC1', 
-             'EMLC2', 
-             'EMLC3', 
+    names = [#'EMLC3', 
              'EMLC4', 
-             'EMLC5',
+             #'EMLC5',
              'EMLC6', 
+             #'EMLC7', 
+             #'EMLC8', 
+             'EMLC9', 
+             #'EMLC10'
              ]
     #dic = {}
     for name in names:
@@ -493,6 +635,152 @@ def check_emlc():
         #dic[name] = matching
     #print(dic)
 
+
+
+# _GEN_EMLC ===================================================================================================================
+# /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+# n                    (0,...)               number of nodes (can this vary or should always be the same for each sample?)
+
+# in_g                 {False,True}          check if in degree is greater than some value
+# in_g_val             [0,n]                 value for in degree to be greater than
+# in_g_count           [0,n]                 number of nodes this must hold for
+
+# in_l                 {False,True}          check if in degree is less than some value
+# in_l_val             [0,n]                 value for in degree to be less than
+# in_l_count           [0,n]                 number of nodes this must hold for
+
+# out_g                {False,True}          check if out degree is greater than some value
+# out_g_val            [0,n]                 value for out degree to be greater than
+# out_g_count          [0,n]                 number of nodes this must hold for
+
+# out_l                {False,True}          check if out degree is less than some value
+# out_l_val            [0,n]                 value for out degree to be less than
+# out_l_count          [0,n]                 number of nodes this must hold for
+
+# in_g_neigh           {False,True}          check if neighbor's in degree is greater than some value
+# in_g_val_neigh       [0,n]                 value for in degree to be greater than
+# in_g_count_neigh     [0,n]                 number of nodes this must hold for
+
+# in_l_neigh           {False,True}          check if neighbor's in degree is less than some value
+# in_l_val_neigh       [0,n]                 value for in degree to be less than
+# in_l_count_neigh     [0,n]                 number of nodes this must hold for
+
+# out_g_neigh          {False,True}          check if neighbor's out degree is greater than some value
+# out_g_val_neigh      [0,n]                 value for out degree to be less than
+# out_g_count_neigh    [0,n]                 number of nodes this must hold for
+
+# out_l_neigh          {False,True}          check if neighbor's out degree is less than some value
+# out_l_val_neigh      [0,n]                 value for out degree to be less than
+# out_l_count_neigh    [0,n]                 number of nodes this must hold for
+# /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+def _gen_EMLC(n=5,
+              in_g=True, in_g_val=1, in_g_count=0.5,
+              in_l=False, in_l_val=1, in_l_count=0.5,
+              out_g=True, out_g_val=1, out_g_count=0.5, 
+              out_l=False, out_l_val=1, out_l_count=0.5,
+              in_g_neigh=True, in_g_val_neigh=1, in_g_count_neigh=0.5,
+              in_l_neigh=False, in_l_val_neigh=1, in_l_count_neigh=0.5,
+              out_g_neigh=True, out_g_val_neigh=1, out_g_count_neigh=0.5, 
+              out_l_neigh=False, out_l_val_neigh=1, out_l_count_neigh=0.5):
+
+    # if checking both greater than and less than (for node in degree), ensure great than value is larger than less than value
+    if in_g and in_l:
+        if in_g_val < in_l_val:
+            ERR()
+
+    # if checking both greater than and less than (for node out degree), ensure great than value is larger than less than value
+    if out_g and out_l:
+        if out_g_val < out_l_val:
+            ERR()
+
+    # if checking greater than (for node in degree), ensure count is in [0,n]
+    if in_g_count < 0 or in_g_count > n:
+        ERR()
+
+    # if checking less than (for node in degree), ensure count is in [0,n]
+    if in_l_count < 0 or in_l_count > n:
+        ERR()
+
+    # if checking greater than (for node out degree), ensure count is in [0,n]
+    if out_g_count < 0 or out_g_count > n:
+        ERR()
+
+    # if checking less than (for node out degree), ensure count is in [0,n]
+    if out_l_count < 0 or out_l_count > n:
+        ERR()
+
+    # if checking greater than (for node in degree), ensure value is in [0,n]
+    if in_g:
+        if in_g_val < 0 or in_g_val > n:
+            ERR()
+
+    # if checking less than (for node in degree), ensure value is in [0,n]
+    if in_l:
+        if in_l_val < 0 or in_l_val > n:
+            ERR()
+
+    # if checking greater than (for node out degree), ensure value is in [0,n]
+    if out_g:
+        if out_g_val < 0 or out_g_val > n:
+            ERR()
+
+    # if checking less than (for node out degree), ensure value is in [0,n]
+    if out_l:
+        if out_l_val < 0 or out_l_val > n:
+            ERR()
+
+    # if checking greater than and less than (for neighbor in degree), ensure great than value is larger than less than value
+    if in_g_neigh and in_l_neigh:
+        if in_g_val_neigh < in_l_val_neigh:
+            ERR()
+ 
+    # if checking greater than and less than (for neighbor out degree), ensure great than value is larger than less than value   
+    if out_g_neigh and out_l_neigh:
+        if out_g_val_neigh < out_l_val_neigh:
+            ERR()
+
+    # if checking greater than (for neighbor in degree), ensure count is in [0,n]
+    if in_g_count_neigh < 0 or in_g_count_neigh > n:
+        ERR()
+
+    # if checking less than (for neighbor in degree), ensure count is in [0,n]
+    if in_l_count_neigh < 0 or in_l_count_neigh > n:
+        ERR()
+
+    # if checking greater than (for neighbor out degree), ensure count is in [0,n]
+    if out_g_count_neigh < 0 or out_g_count_neigh > n:
+        ERR()
+
+    # if checking less than (for neighbor out degree), ensure count is in [0,n]
+    if out_l_count_neigh < 0 or out_l_count_neigh > n:
+        ERR()
+
+    # if checking greater than (for neighbor in degree), ensure value is in [0,n]
+    if in_g_neigh:
+        if in_g_val_neigh < 0 or in_g_val_neigh > n:
+            ERR()
+
+    # if checking less than (for neighbor in degree), ensure value is in [0,n]
+    if in_l_neigh:
+        if in_l_val_neigh < 0 or in_l_val_neigh > n:
+            ERR()
+
+    # if checking greater than (for neighbor out degree), ensure value is in [0,n]
+    if out_g_neigh:
+        if out_g_val_neigh < 0 or out_g_val_neigh > n:
+            ERR()
+
+    # if checking less than (for neighbor out degree), ensure value is in [0,n]
+    if out_l_neigh:
+        if out_l_val_neigh < 0 or out_l_val_neigh > n:
+            ERR()
+
+    DBG("it worked!",1)
+    return 0
+
+
+
+# __MAIN__ ====================================================================================================================
 if __name__ == "__main__":
     check_emlc()
     #graph_degree_stats_test()
