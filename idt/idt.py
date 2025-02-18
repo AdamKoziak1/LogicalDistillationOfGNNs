@@ -11,7 +11,7 @@ from torch_geometric.data import Batch
 
 
 class IDT:
-    def __init__(self, width=10, sample_size=20, layer_depth=3, max_depth=5, ccp_alpha=.0):
+    def __init__(self, width=10, sample_size=20, layer_depth=3, max_depth=5, ccp_alpha=.0, directed=True):
         self.width = width
         self.sample_size = sample_size
         self.layer_depth = layer_depth
@@ -19,6 +19,7 @@ class IDT:
         self.ccp_alpha = ccp_alpha
         self.layer = None
         self.out_layer = None
+        self.directed=directed
 
     def fit(self, batch, values, y, sample_weight=None):
         if self.sample_size is None or self.sample_size > len(batch):
@@ -32,7 +33,7 @@ class IDT:
             new_layers = []
             depth_indices_new = []
             for _ in range(self.width):
-                new_layers.append(IDTInnerLayer(self.layer_depth, depth_indices))
+                new_layers.append(IDTInnerLayer(self.layer_depth, depth_indices, self.directed))
                 samples = np.random.choice(np.arange(len(batch)), size=min(self.sample_size, x.shape[0]), replace=False)
                 small_batch = Batch.from_data_list(batch[samples])
                 small_batch_indices = torch.arange(len(batch.batch))[(batch.batch == torch.tensor(samples).view(-1, 1)).max(axis=0).values]
@@ -115,7 +116,7 @@ class IDT:
 
 
 class IDTInnerLayer:
-    def __init__(self, max_depth, depth_indices):
+    def __init__(self, max_depth, depth_indices, directed=True):
         self.max_depth = max_depth
         self.depth_indices = [index for index in depth_indices]
         self.n_features_in = sum(depth_indices)
@@ -123,24 +124,32 @@ class IDTInnerLayer:
         self.leaf_indices = None
         self.leaf_values = None
         self.leaf_formulas = None
+        self.directed = directed
 
     def fit(self, x, y, adj, sample_weight=None):
         if self.n_features_in == 0:
             x = np.ones((x.shape[0], 1))
-
         x_neigh_out = adj @ x
         deg_out = adj.sum(axis=1) # out-neighbors are handled as before
 
-        x_neigh_in = adj.T @ x
-        deg_in = adj.T.sum(axis=1) # transpose represents in-neighbors
+        if self.directed:
+            x_neigh_in = adj.T @ x
+            deg_in = adj.T.sum(axis=1) # transpose represents in-neighbors
 
-        x = np.asarray(np.concatenate([
-            x,
-            x_neigh_out,
-            x_neigh_in,
-            x_neigh_out / deg_out.clip(1e-6, None),
-            x_neigh_in / deg_in.clip(1e-6, None)
-        ], axis=1))
+            x = np.asarray(np.concatenate([
+                x,
+                x_neigh_out,
+                x_neigh_in,
+                x_neigh_out / deg_out.clip(1e-6, None),
+                x_neigh_in / deg_in.clip(1e-6, None)
+            ], axis=1))
+        else:
+            x = np.asarray(np.concatenate([
+                x,
+                x_neigh_out,
+                x_neigh_out / deg_out.clip(1e-6, None)
+            ], axis=1))
+
         self.dt = DecisionTreeRegressor(max_depth=self.max_depth, splitter='random')
         self.dt.fit(x, y, sample_weight=sample_weight)
         leaves = _leaves(self.dt.tree_)
@@ -171,16 +180,23 @@ class IDTInnerLayer:
         x_neigh_out = adj @ x
         deg_out = adj.sum(axis=1) # out-neighbors are handled as before
 
-        x_neigh_in = adj.T @ x
-        deg_in = adj.T.sum(axis=1) # transpose represents in-neighbors
+        if self.directed:
+            x_neigh_in = adj.T @ x
+            deg_in = adj.T.sum(axis=1) # transpose represents in-neighbors
 
-        x = np.asarray(np.concatenate([
-            x,
-            x_neigh_out,
-            x_neigh_in,
-            x_neigh_out / deg_out.clip(1e-6, None),
-            x_neigh_in / deg_in.clip(1e-6, None)
-        ], axis=1))
+            x = np.asarray(np.concatenate([
+                x,
+                x_neigh_out,
+                x_neigh_in,
+                x_neigh_out / deg_out.clip(1e-6, None),
+                x_neigh_in / deg_in.clip(1e-6, None)
+            ], axis=1))
+        else:
+            x = np.asarray(np.concatenate([
+                x,
+                x_neigh_out,
+                x_neigh_out / deg_out.clip(1e-6, None)
+            ], axis=1))
         pred = self.dt.apply(x)
         return self.leaf_values[self.leaf_indices[pred]]
 
