@@ -76,7 +76,7 @@ def run_split(args, cv_split, run_id, device=0):
     sample_weight = weight[train_val_batch.y]
     
     def run_idt(values, y, sample_weight):
-        idt = IDT(width=args.width, sample_size=args.sample_size, layer_depth=args.layer_depth, max_depth=args.max_depth, ccp_alpha=args.ccp_alpha).fit(
+        idt = IDT(width=args.width, sample_size=args.sample_size, layer_depth=args.layer_depth, max_depth=args.max_depth, ccp_alpha=args.ccp_alpha, directed=(args.dir_modal == 1)).fit(
             train_val_batch, values, y=y, sample_weight=sample_weight)
         explainer_prediction = idt.predict(test_batch)
         test_accuracy = (explainer_prediction == test_batch.y.detach().numpy()).mean()
@@ -141,6 +141,8 @@ if __name__ == '__main__':
     parser.add_argument('--max_depth', type=int, default=None, help='Maximum depth of final tree')
     parser.add_argument('--ccp_alpha', type=float, default=1e-3, help='ccp_alpha of final tree')
     parser.add_argument('--devices', type=int, default=1, help='Number of devices')
+    parser.add_argument('--dir_modal', type=int, default=1, help='Whether to include the A^T modal parameters in the idt distillation', choices=[0,1])
+    #parser.add_argument('--conv', type=str, default='', help='', choices=['GCN', 'GCN-Dir', 'GAT'])
 
     def signal_handler(sig, frame):
         signal.signal(sig, signal.SIG_IGN)
