@@ -74,13 +74,17 @@ def run_split(args, cv_split, run_id, device=0):
     logger.experiment.summary['gin_gin_fidelity'] = (gin_prediction == gin_prediction).mean()
 
     sample_weight = weight[train_val_batch.y]
-    
+    print("gnns done")
     def run_idt(values, y, sample_weight):
+        print("idt fitting start:")
         idt = IDT(width=args.width, sample_size=args.sample_size, layer_depth=args.layer_depth, max_depth=args.max_depth, ccp_alpha=args.ccp_alpha, directed=(args.dir_modal == 1)).fit(
             train_val_batch, values, y=y, sample_weight=sample_weight)
+        print("idt fit done, predicting:")
         explainer_prediction = idt.predict(test_batch)
+        print("idt predicted")
         test_accuracy = (explainer_prediction == test_batch.y.detach().numpy()).mean()
         idt.prune()
+        print("idt pruned")
         return (
             test_accuracy,
             f1_score(test_batch.y.detach().numpy(), explainer_prediction, average='macro'),
@@ -152,3 +156,4 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     run_cv(args, time.time())
+    print("all good")
