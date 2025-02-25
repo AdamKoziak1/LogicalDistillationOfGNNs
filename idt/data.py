@@ -25,8 +25,8 @@ def data(name, kfold, cv_split, seed=0, directed=True):
         train_data, val_data = torch.utils.data.random_split(train_val_data, [len(train_val_data) - n_test, n_test])
         test_data = datalist[cv_split * n_test : (cv_split + 1) * n_test]
 
-        train_loader = DataLoader(train_data, batch_size=len(train_data), shuffle=True)
-        val_loader = DataLoader(val_data, batch_size=len(val_data), shuffle=False)
+        train_loader = DataLoader(train_data, batch_size=len(train_data), shuffle=True, num_workers=4)
+        val_loader = DataLoader(val_data, batch_size=len(val_data), shuffle=False, num_workers=4)
 
         train_val_batch = Batch.from_data_list(train_val_data)
         test_batch = Batch.from_data_list(test_data)
