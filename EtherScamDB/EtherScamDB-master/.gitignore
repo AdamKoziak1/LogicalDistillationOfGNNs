@@ -1,0 +1,6 @@
+node_modules
+npm-debug.log
+_cache
+_site
+config.js
+_data/security.txt
