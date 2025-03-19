@@ -6,8 +6,10 @@ import time
 import signal
 
 # Define datasets and convolution types to test
-datasets = ["EMLC0", "Cora", "CiteSeer", "PubMed"]
-conv_types = ["GCN", "GIN", "SAGE", "GAT", "DIR-GCN", "DIR-GIN", "DIR-SAGE", "DIR-GAT"]
+#datasets = ["EMLC0", "EMLC1", "AIDS", "PROTEINS"]
+datasets = ["EMLC2"]
+#conv_types = ["GCN", "GIN", "SAGE", "GAT", "DIR-GCN", "DIR-GIN", "DIR-SAGE", "DIR-GAT"]
+conv_types = ["GCN", "DIR-GCN"]
 checkpoint_file = "sweep_checkpoint.json"
 
 # Load existing sweeps if checkpoint file exists
@@ -23,11 +25,10 @@ sweep_config = {
     "method": "bayes",  # Bayesian Optimization
     "metric": {"name": "avg_val_loss", "goal": "minimize"},
     "parameters": {
-        "layers": {"values": [4, 6, 8, 10, 12, 16]},
+        "layers": {"values": [4, 6, 8, 10, 12]},
         "dim": {"values": [64, 128, 256, 512]},
-        "lr": {"distribution": "log_uniform", "min": 1e-5, "max": 1e-2},
-    },
-    "count": 25  # Stop the sweep after 20 trials
+        "lr": {"distribution": "log_uniform_values", "min": 1e-5, "max": 1e-3},
+    }
 }
 
 # Function to save checkpoint
@@ -68,7 +69,9 @@ for dataset in datasets:
         print(f"[INFO] Running agent for {sweep_key} (Sweep ID: {sweep_id})")
 
         # Run agent synchronously (blocking call)
-        process = subprocess.Popen(["wandb", "agent", sweep_id])
+        max_trials=20
+        subprocess.Popen(["wandb", "agent", sweep_id, "--count", str(max_trials)])
+        process = subprocess.Popen(["wandb", "agent", sweep_id, "--count", str(max_trials)])
         process.wait()  # Ensures only one sweep runs at a time
 
         print(f"[INFO] Completed sweep for {sweep_key}")

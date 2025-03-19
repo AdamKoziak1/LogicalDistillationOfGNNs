@@ -141,14 +141,14 @@ def run_split(args, cv_split, run_id, device=0):
             test_acc = (prediction == test_batch.y.detach().numpy()).mean()
             f1_macro = f1_score(test_batch.y.detach().numpy(), prediction, average='macro')
 
-            logger.experiment.summary[f'{name}_test_acc'] = test_acc
-            logger.experiment.summary[f'{name}_f1_macro'] = f1_macro
+            logger.experiment.log({f'{name}_test_acc': test_acc})
+            logger.experiment.log({f'{name}_f1_macro':f1_macro})
             print(f"{name} params: {model.count_params()} acc:{test_acc} f1:{f1_macro}")
             
             for j, other_name in enumerate(predictions.keys()):
                 fidelity = (prediction == predictions[other_name]).mean()
                 fidelity_matrix_gnn[i, j] = fidelity
-                logger.experiment.summary[f'{name}_{other_name}_fidelity'] = fidelity
+                logger.experiment.log({f'{name}_{other_name}_fidelity': fidelity})
                 print(f"   {name}_{other_name}_fidelity: {fidelity}")
 
     eval_end = time.time()-eval_start
@@ -156,7 +156,7 @@ def run_split(args, cv_split, run_id, device=0):
     gen_heatmap(
         fidelity_matrix_gnn,
         title="Pairwise_GNN_Fidelity",
-        row_labels=conv_types[::-1],
+        row_labels=conv_types,
         col_labels=conv_types,
         logger=logger,
         mask_zeros=True,    # mask out zero entries
@@ -173,8 +173,8 @@ def run_split(args, cv_split, run_id, device=0):
         test_acc = (idt_prediction == test_batch.y.detach().numpy()).mean()
         f1_macro = f1_score(test_batch.y.detach().numpy(), idt_prediction, average='macro')
 
-        logger.experiment.summary[f'{name}_test_acc'] = test_acc
-        logger.experiment.summary[f'{name}_f1_macro'] = f1_macro
+        logger.experiment.log({f'{name}_test_acc': test_acc})
+        logger.experiment.log({f'{name}_f1_macro': f1_macro})
         idt.prune()
         return idt_prediction
            
@@ -215,12 +215,12 @@ def run_split(args, cv_split, run_id, device=0):
         for j, conv_type in enumerate(conv_types):
             fidelity_idt = (idt_prediction == predictions[conv_type]).mean()
             fidelity_matrix_idt[i, j] = fidelity_idt
-            logger.experiment.summary[f'{idt_pred_name}_{conv_type}_fidelity'] = fidelity_idt
+            logger.experiment.log({f'{idt_pred_name}_{conv_type}_fidelity': fidelity_idt})
             print(f"   {idt_pred_name}_{conv_type}_fidelity: {fidelity_idt}")
 
             fidelity_idt_true = (idt_true_prediction == predictions[conv_type]).mean()
             fidelity_matrix_idt_true[i, j] = fidelity_idt_true
-            logger.experiment.summary[f'{idt_true_name}_{conv_type}_fidelity'] = fidelity_idt_true
+            logger.experiment.log({f'{idt_true_name}_{conv_type}_fidelity': fidelity_idt_true})
             print(f"   {idt_true_name}_{conv_type}_fidelity: {fidelity_idt_true}")
 
     row_labels_idt = [f"idt_{ct}_" for ct in conv_types]
@@ -229,7 +229,7 @@ def run_split(args, cv_split, run_id, device=0):
     gen_heatmap(
         fidelity_matrix_idt,
         title="Pairwise_IDT_Fidelity",
-        row_labels=row_labels_idt[::-1],
+        row_labels=row_labels_idt,
         col_labels=conv_types,
         logger=logger,
         mask_zeros=False,
@@ -239,7 +239,7 @@ def run_split(args, cv_split, run_id, device=0):
     gen_heatmap(
         fidelity_matrix_idt_true,
         title="Pairwise_True_IDT_Fidelity",
-        row_labels=row_labels_idt_true[::-1],
+        row_labels=row_labels_idt_true,
         col_labels=conv_types,
         logger=logger,
         mask_zeros=False,
@@ -282,7 +282,7 @@ if __name__ == '__main__':
     parser.add_argument('--ccp_alpha', type=float, default=1e-3, help='ccp_alpha of final tree')
     parser.add_argument('--devices', type=int, default=1, help='Number of devices')
     parser.add_argument('--dir_modal', type=int, default=1, help='Whether to include the A^T modal parameters in the idt distillation', choices=[0,1])
-    #parser.add_argument('--conv', type=str, default='GCN', help='', choices=['GCN', 'GIN', 'SAGE', 'GAT, 'DIR-GCN', 'DIR-GIN', 'DIR-SAGE', 'DIR-GAT'])
+    #parser.add_argument('--conv', type=str, default='GCN', help='', choices=['GCN', 'GIN', 'SAGE', 'GAT', 'DIR-GCN', 'DIR-GIN', 'DIR-SAGE', 'DIR-GAT'])
 
     def signal_handler(sig, frame):
         signal.signal(sig, signal.SIG_IGN)

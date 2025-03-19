@@ -70,7 +70,7 @@ def main():
     parser.add_argument('--kfold', type=int, default=5, help='Number of folds for cross-validation')
     parser.add_argument('--layers', type=int, default=8, help='Number of layers')
     parser.add_argument('--dim', type=int, default=128, help='Dimension of node embeddings')
-    parser.add_argument('--max_steps', type=int, default=5000, help='Maximum training steps per fold')
+    parser.add_argument('--max_steps', type=int, default=500, help='Maximum training steps per fold')
     parser.add_argument('--devices', type=int, default=1, help='Number of devices to use')
     parser.add_argument('--conv', type=str, default='GCN', help='', choices=['GCN', 'GIN', 'SAGE', 'GAT', 'DIR-GCN', 'DIR-GIN', 'DIR-SAGE', 'DIR-GAT'])
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')

@@ -5,6 +5,7 @@ venv*
 data/*
 *.png
 datasets/*
+sweep_checkpoint.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
