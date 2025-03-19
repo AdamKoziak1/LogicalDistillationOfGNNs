@@ -31,7 +31,7 @@ def get_conv_and_norm(conv_name, dim, alpha=0.5, heads=1):
         case "GAT":
             return GATConv(dim, dim, heads=heads), Identity()
         case "DIR-GCN":
-            return DirGCNConv(dim, dim, alpha), Identity()
+            return DirGCNConv(dim, dim, alpha), GraphNorm(dim)
         # case "DIR-GIN":
         #     return DirGINConv(dim, dim, alpha), Identity()
         case "DIR-SAGE":
