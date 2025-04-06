@@ -4,6 +4,9 @@ import networkx as nx
 from networkx.generators import random_graphs, lattice, small, classic
 import numpy as np
 
+import random
+import copy
+
 import torch
 from torch_geometric.data import Batch, Data
 from torch_geometric.loader import DataLoader
@@ -13,14 +16,15 @@ import matplotlib.pyplot as plt
 
 def data(name, kfold, cv_split, seed=0, directed=True):
     rng = np.random.default_rng(seed)
-    if name == 'BAMultiShapes' or 'EMLC' in name:
+    if name == 'BAMultiShapes' or ('EMLC' in name) or ('Ego' in name):
         if name == 'BAMultiShapes':
             datalist = [_generate_BAMultiShapes(rng) for _ in range(8000)] # TODO implement the directed logic for this one
-        else:
+        elif 'EMLC' in name:
             datalist = [_generate_EMLC(name, rng, directed) for _ in range(5000)]
+        else:
+            datalist = [_generate_powerlaw(rng) for _ in range(5000)]  # Powerlaw DiGraph EgoNetwork (without edge labels or multiedges)
         
         n_test = len(datalist) // kfold
-        
         train_val_data = datalist[:cv_split * n_test] + datalist[(cv_split + 1) * n_test:]
         train_data, val_data = torch.utils.data.random_split(train_val_data, [len(train_val_data) - n_test, n_test])
         test_data = datalist[cv_split * n_test : (cv_split + 1) * n_test]
@@ -32,6 +36,7 @@ def data(name, kfold, cv_split, seed=0, directed=True):
         test_batch = Batch.from_data_list(test_data)
 
         return 1, 2, train_loader, val_loader, train_val_batch, test_batch
+
     else:
         dataset = TUDataset(root='data', name=name)
         n_test = len(dataset) // kfold
@@ -62,10 +67,10 @@ def _generate_EMLC(name, rng, directed=True):
     graph = nx.erdos_renyi_graph(nodes, 0.5, seed=rng.choice(2**32), directed=directed)
     adj = nx.adjacency_matrix(graph).toarray()
     if directed:
-        return _generate_EMLC_from_graph_directed(name, u0, u1, u2, adj)
+        return _generate_EMLC_from_graph_directed(name, u0, u1, u2, adj, nodes)
     return _generate_EMLC_from_graph_undirected(name, u0, u1, u2, adj)
 
-def _generate_EMLC_from_graph_directed(name, u0, u1, u2, adj):
+def _generate_EMLC_from_graph_directed(name, u0, u1, u2, adj, nodes):
     edge_index = _adj_to_edge_index(adj)
 
     out_adj = adj
@@ -74,24 +79,27 @@ def _generate_EMLC_from_graph_directed(name, u0, u1, u2, adj):
     degrees_out = out_adj.sum(axis=1)  # Out-degree (sum over columns)
     degrees_in = in_adj.sum(axis=1)   # In-degree (sum over rows)
 
+    degrees_out_norm = degrees_out / nodes
+    degrees_in_norm = degrees_in / nodes
+
     match name:
         case 'EMLC0': #Nick's example, 5 nodes
-            has_gt_3_out_neighbors = (degrees_out > 3)
+            has_gt_3_out_neighbors = (degrees_out_norm > 0.6)
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_gt_3_out_neighbors.max()))
         
         case 'EMLC1':
-            has_more_than_half_u0 = (u0.sum() > 6)
+            has_more_than_half_u0 = (u0.mean() > 0.5)
             return Data(x=torch.tensor(u0), edge_index=edge_index, y=int(has_more_than_half_u0))
 
         case 'EMLC2':
-            has_gt_8_out_neighbors = (degrees_out > 8).max()
-            has_gt_8_in_neighbors = (degrees_in > 8).max()
+            has_gt_8_out_neighbors = (degrees_out_norm > 0.65).max()
+            has_gt_8_in_neighbors = (degrees_in_norm > 0.65).max()
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=int(has_gt_8_out_neighbors and has_gt_8_in_neighbors))
 
         case 'EMLC3':
-            has_gt_8_out_neighbors = (degrees_out > 8).max()
-            has_gt_8_in_neighbors = (degrees_in > 8).max()
-            return Data(x=torch.tensor(u2), edge_index=edge_index, y=int(has_gt_8_out_neighbors and has_gt_8_in_neighbors))
+            has_gt_8_out_neighbors = (degrees_out_norm > 0.75).max()
+            has_gt_8_in_neighbors = (degrees_in_norm > 0.75).max()
+            return Data(x=torch.tensor(u2), edge_index=edge_index, y=int(has_gt_8_out_neighbors or has_gt_8_in_neighbors))
 
         case 'EMLC4':
             has_lt_4_in_or_gt_9_out_neighbors = (degrees_in < 4) & (degrees_out > 3)
@@ -124,6 +132,42 @@ def _generate_EMLC_from_graph_undirected(name, u0, u1, adj):
             has_gt_6_neighbors = degrees > 6
             more_than_half_neighbours_with_gt_6_neighbors = ((adj @ has_gt_6_neighbors) / degrees.clip(1)) > 0.5
             return Data(x=torch.tensor(u1), edge_index=edge_index, y=(torch.tensor(more_than_half_neighbours_with_gt_6_neighbors).float().mean() > 0.5).long())
+
+def _generate_powerlaw(rng):
+    power_law = nx.powerlaw_cluster_graph(n=40, m=2, p=0.9)
+    ego = random.randint(0,39)
+    ego_graph = nx.ego_graph(power_law, ego)
+    dir_ego_graph = nx.DiGraph(ego_graph)
+    pruned_dir_ego_graph = copy.deepcopy(dir_ego_graph)
+
+    not_seen = list(pruned_dir_ego_graph.edges())
+    for e1 in dir_ego_graph.edges():
+        not_seen.remove(e1)
+        for e2 in not_seen:
+            if e1[0] == e2[1] and e1[1] == e2[0]:
+                has_e1 = pruned_dir_ego_graph.has_edge(e1[0], e1[1])
+                has_e2 = pruned_dir_ego_graph.has_edge(e2[0], e2[1])
+                if has_e1 and has_e2:
+                    r = random.random()
+                    if r < 0.33 and has_e1 and has_e2:
+                        pruned_dir_ego_graph.remove_edge(e1[0], e1[1])
+                    elif r < 0.66 and has_e1 and has_e2:
+                        pruned_dir_ego_graph.remove_edge(e2[0], e2[1])
+        
+    attributed_graph = copy.deepcopy(pruned_dir_ego_graph)
+    node_attributes = {}
+    node_features = []
+    nodes = len(attributed_graph.nodes())
+    node_features = np.round(rng.random((nodes, 1)).astype(np.float32), 2)
+    for node in list(attributed_graph.nodes()):
+        r = round(random.random(),2)
+        node_attributes.update({node : r})
+    nx.set_node_attributes(attributed_graph, node_attributes, "account_id")
+
+    adj = nx.adjacency_matrix(attributed_graph).toarray()
+    edge_index = _adj_to_edge_index(adj)
+    return Data(x=torch.tensor(node_features), edge_index=edge_index, y=int(nx.clustering(attributed_graph, nodes=ego, weight=None) > 0.25)) # > 0.25 implies ICO Wallet
+
 
 
 # The following code is a modified version of
@@ -472,12 +516,14 @@ def graph_degree_stats_test():
 def check_emlc():
     #names = ['EMLC2']
     names = ['EMLC0', 
-             'EMLC1', 
-             'EMLC2', 
-             'EMLC3', 
-             'EMLC4', 
-             'EMLC5',
-             'EMLC6', 
+             #'EMLC1', 
+             #'EMLC2', 
+             #'EMLC3', 
+             "Ego",
+             #'BAMultiShapes'
+            #  'EMLC4', 
+            #  'EMLC5',
+            #  'EMLC6', 
              ]
     #dic = {}
     for name in names:
@@ -488,6 +534,7 @@ def check_emlc():
             bincount = torch.bincount(train_val_batch.y, minlength=2)
             weight = len(train_val_batch) / (2 * bincount.float())
             print(bincount, weight)
+            print(train_val_batch.x[0].shape, train_val_batch.x[0])
             #if EMLC_compare(name):
                 #matching +=1 
         #dic[name] = matching

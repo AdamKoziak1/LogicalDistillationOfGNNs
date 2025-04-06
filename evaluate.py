@@ -22,7 +22,7 @@ from idt.gnn import GNN
 
 def create_and_train_GNN(num_features, num_classes, weight, args, train_loader, val_loader, logger, device, conv="GCN"):
     print(f"creating {conv} model")
-    model = GNN(num_features, num_classes, layers=args.layers, dim=args.dim, activation=args.activation, conv=conv, pool=args.pooling, lr=args.lr, weight=weight)
+    model = GNN(num_features, num_classes, layers=args.layers, dim=args.dim, activation=args.activation, conv=conv, pool=args.pooling, lr=args.lr, weight=weight, norm=args.norm)
     early_stop_callback = EarlyStopping(monitor=f"{conv}_val_loss", patience=25, mode="min")
     trainer = Trainer(
         max_steps=args.max_steps,
@@ -283,6 +283,7 @@ if __name__ == '__main__':
     parser.add_argument('--devices', type=int, default=1, help='Number of devices')
     parser.add_argument('--dir_modal', type=int, default=1, help='Whether to include the A^T modal parameters in the idt distillation', choices=[0,1])
     parser.add_argument('--conv', type=str, default='GCN', help='', choices=['GCN', 'GIN', 'SAGE', 'GAT', 'DIR-GCN', 'DIR-GIN', 'DIR-SAGE', 'DIR-GAT'])
+    parser.add_argument('--norm', type=int, default=1, help='', choices=[0,1])
 
     def signal_handler(sig, frame):
         signal.signal(sig, signal.SIG_IGN)

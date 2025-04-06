@@ -1,24 +1,12 @@
 from argparse import ArgumentParser
 from joblib import Parallel, delayed
-import lightning
 from lightning.pytorch import Trainer
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks import ModelCheckpoint
-import matplotlib.pyplot as plt
-import numpy as np
-import os
-import pandas as pd
 from pytorch_lightning.loggers import WandbLogger
-import seaborn as sns
-import signal
-from sklearn.metrics import f1_score
-import sys
-import time
 import torch
-import wandb
 
 from idt.data import data
-from idt.idt import IDT, get_activations
 from idt.gnn import GNN
 
 def train_fold(args, fold, conv_type, device):
@@ -37,12 +25,13 @@ def train_fold(args, fold, conv_type, device):
         conv=conv_type,
         pool=args.pooling,
         lr=args.lr,
-        weight=weight
+        weight=weight,
+        norm=args.norm
     )
     
     # Set up callbacks: EarlyStopping and ModelCheckpoint (which saves the best validation loss)
     monitor_metric = f"{conv_type}_val_loss"
-    early_stop_callback = EarlyStopping(monitor=monitor_metric, patience=25, mode="min")
+    early_stop_callback = EarlyStopping(monitor=monitor_metric, patience=1000, mode="min")
     checkpoint_callback = ModelCheckpoint(monitor=monitor_metric, mode="min", save_top_k=1,
                                           filename=f"fold{fold}" + "-{epoch}-{"+monitor_metric+":.4f}")
     
@@ -70,10 +59,11 @@ def main():
     parser.add_argument('--kfold', type=int, default=5, help='Number of folds for cross-validation')
     parser.add_argument('--layers', type=int, default=8, help='Number of layers')
     parser.add_argument('--dim', type=int, default=128, help='Dimension of node embeddings')
-    parser.add_argument('--max_steps', type=int, default=500, help='Maximum training steps per fold')
+    parser.add_argument('--max_steps', type=int, default=1000, help='Maximum training steps per fold')
     parser.add_argument('--devices', type=int, default=1, help='Number of devices to use')
     parser.add_argument('--conv', type=str, default='GCN', help='', choices=['GCN', 'GIN', 'SAGE', 'GAT', 'DIR-GCN', 'DIR-GIN', 'DIR-SAGE', 'DIR-GAT'])
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
+    parser.add_argument('--norm', type=int, default=1, help='', choices=[0,1])
     args = parser.parse_args()
 
     
@@ -85,12 +75,18 @@ def main():
 
     torch.set_float32_matmul_precision('high')
     
-    # Run k‐fold cross validation
+    #Run k‐fold cross validation
     for fold in range(args.kfold):
         print(f"Training fold {fold + 1}/{args.kfold} for {conv_type}")
         best_loss = train_fold(args, fold, conv_type, device=0)
         print(f"Fold {fold + 1} best validation loss: {best_loss:.4f}")
         fold_val_losses.append(best_loss)
+    
+    # DOES NOT WORK 
+    # fold_val_losses = Parallel(n_jobs=args.kfold)(
+    #         delayed(train_fold)(args, fold, conv_type, device=0) 
+    #         for fold in range(args.kfold)
+    #     )
     
     # Compute the average best epoch validation loss across folds
     avg_val_loss = sum(fold_val_losses) / len(fold_val_losses)

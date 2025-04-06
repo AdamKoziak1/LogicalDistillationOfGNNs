@@ -20,26 +20,50 @@ def gin_conv(in_channels, out_channels):
     nn = Sequential(Linear(in_channels, 2 * in_channels), GraphNorm(2 * in_channels), ReLU(), Linear(2 * in_channels, out_channels))
     return GINConv(nn)
 
-def get_conv_and_norm(conv_name, dim, alpha=0.5, heads=1):
+def get_conv(conv_name, dim, alpha=0.5, heads=1):
     match conv_name:
         case "GCN":
-            return GCNConv(dim, dim), GraphNorm(dim)
+            return GCNConv(dim, dim)
         case "GIN":
-            return gin_conv(dim, dim), GraphNorm(dim)
+            return gin_conv(dim, dim)
         case "SAGE":
-            return SAGEConv(dim, dim), Identity()
+            return SAGEConv(dim, dim)
         case "GAT":
-            return GATConv(dim, dim, heads=heads), Identity()
+            return GATConv(dim, dim, heads=heads)
         case "DIR-GCN":
-            return DirGCNConv(dim, dim, alpha), GraphNorm(dim)
+            return DirGCNConv(dim, dim, alpha)
         # case "DIR-GIN":
-        #     return DirGINConv(dim, dim, alpha), Identity()
+        #     return DirGINConv(dim, dim, alpha)
         case "DIR-SAGE":
-            return DirSageConv(dim, dim, alpha), Identity()
+            return DirSageConv(dim, dim, alpha)
         case "DIR-GAT":
-            return DirGATConv(dim, dim, heads=heads, alpha=alpha), Identity()
+            return DirGATConv(dim, dim, heads=heads, alpha=alpha)
         case _: 
             raise ValueError(f"Convolution type {conv_name} not supported")
+        
+def get_norm(conv_name, dim, norm=True):
+    if norm:
+        return GraphNorm(dim)
+    return Identity()
+    # match conv_name:
+    #     case "GCN":
+    #         return GCNConv(dim, dim), GraphNorm(dim)
+    #     case "GIN":
+    #         return gin_conv(dim, dim), GraphNorm(dim)
+    #     case "SAGE":
+    #         return SAGEConv(dim, dim), Identity()
+    #     case "GAT":
+    #         return GATConv(dim, dim, heads=heads), Identity()
+    #     case "DIR-GCN":
+    #         return DirGCNConv(dim, dim, alpha), GraphNorm(dim)
+    #     # case "DIR-GIN":
+    #     #     return DirGINConv(dim, dim, alpha), Identity()
+    #     case "DIR-SAGE":
+    #         return DirSageConv(dim, dim, alpha), Identity()
+    #     case "DIR-GAT":
+    #         return DirGATConv(dim, dim, heads=heads, alpha=alpha), Identity()
+    #     case _: 
+    #         raise ValueError(f"Convolution type {conv_name} not supported")
 
 # TODO this is a bit hacked together not 100% sure on it all. seems to work
 class DirGCNConv(nn.Module):
@@ -132,7 +156,7 @@ class DirGATConv(torch.nn.Module):
 
 
 class GNN(LightningModule):
-    def __init__(self, num_features, num_classes, layers, dim, conv="GCN", activation="ReLU", pool="mean", lr=1e-4, weight=None):
+    def __init__(self, num_features, num_classes, layers, dim, conv="GCN", activation="ReLU", pool="mean", lr=1e-4, weight=None, norm=1):
         super().__init__()
         self.num_features = num_features
         self.num_classes = num_classes
@@ -141,6 +165,7 @@ class GNN(LightningModule):
         self.pool = pool
         self.lr = lr
         self.conv_name = conv
+        self.norm = norm == 1
 
         self.embedding = Linear(num_features, dim)
         match activation:
@@ -153,7 +178,8 @@ class GNN(LightningModule):
         self.conv_layers = torch.nn.ModuleList()
 
         for _ in range(layers):
-            conv_inst, norm_inst = get_conv_and_norm(self.conv_name, dim)
+            conv_inst = get_conv(self.conv_name, dim)
+            norm_inst = get_norm(self.conv_name, dim, norm=self.norm)
             self.conv_layers.append(conv_inst)
             self.norms.append(norm_inst)
 
@@ -164,7 +190,7 @@ class GNN(LightningModule):
         )
         self.loss = torch.nn.NLLLoss(weight=weight)
         
-        self.save_hyperparameters('num_features', 'num_classes', 'layers', 'dim', 'activation', 'pool', 'lr', 'weight')
+        self.save_hyperparameters('num_features', 'num_classes', 'layers', 'dim', 'activation', 'pool', 'lr', 'weight', 'norm')
 
     def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch
